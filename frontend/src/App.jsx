@@ -10,7 +10,6 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import { ProtectedRoute } from "./components/ProtectedRoute";
-
 import { Login } from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 
@@ -18,13 +17,14 @@ import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
 import Sales from "./pages/Sales/Sales";
 import CRM from "./pages/CRM";
-import HR from "./pages/HR";
+import HR from "./pages/HR/HR";
 import Finance from "./pages/Finance";
 import QualityManagement from "./pages/QualityManagement";
 import Logistics from "./pages/Logistics";
 import Production from "./pages/Production";
 import Procurement from "./pages/Procurement";
 import Settings from "./pages/Settings";
+import Multibranch from "./pages/Multibranch/Multibranch";
 
 // HR Submodules
 import Employees from "./pages/HR/Employees";
@@ -34,6 +34,12 @@ import Salary from "./pages/HR/Salary";
 import Leaves from "./pages/HR/Leaves";
 import Performance from "./pages/HR/Performance";
 
+// Finance
+import GeneralLedger from "./pages/Finance/GeneralLedger";
+import AccountPayable from "./pages/Finance/AccountsPayable";
+import AccountReceivable from "./pages/Finance/AccountsReceivable";
+import TaxationCompliance from "./pages/Finance/TaxationCompliance";
+import FinancialReports from "./pages/Finance/Reports";
 /* ------------------------------------------------------------------ */
 /* Layout (Navbar + Sidebar + Main) */
 /* ------------------------------------------------------------------ */
@@ -177,6 +183,46 @@ const AppRoutes = () => {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/finance/ledger"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <GeneralLedger />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/ap"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <AccountPayable />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/ar"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <AccountReceivable />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/taxcomp"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <TaxationCompliance />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/reports"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <FinancialReports />
+                      </ProtectedRoute>
+                    }
+                  />
 
                   {/* Quality Management */}
                   <Route
@@ -224,6 +270,14 @@ const AppRoutes = () => {
                     element={
                       <ProtectedRoute requireSuperAdmin>
                         <Settings />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/multibranch"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <Multibranch />
                       </ProtectedRoute>
                     }
                   />
