@@ -5,6 +5,7 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
+import { OrderShippingProvider } from "./context/OrderShippingContext";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Sidebar } from "./components/Sidebar";
@@ -14,25 +15,24 @@ import { Login } from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 
 // Super Admin Modules
-import Inventory from "./pages/Inventory";
-import Sales from "./pages/Sales/Sales";
-import CRM from "./pages/CRM";
+
+import CRM from "./pages/CRM/CRM";
 import HR from "./pages/HR/HR";
-import Finance from "./pages/Finance";
-import QualityManagement from "./pages/QualityManagement";
-import Logistics from "./pages/Logistics";
-import Production from "./pages/Production";
-import Procurement from "./pages/Procurement";
+import Finance from "./pages/Finance/Finance";
+import QualityManagement from "./pages/QualityManagement/QualityManagement";
+import Logistics from "./pages/Logistics/Logistics";
+import Production from "./pages/Production/Production";
+import Procurement from "./pages/Procurement/Procurement";
 import Settings from "./pages/Settings";
 import Multibranch from "./pages/Multibranch/Multibranch";
 
 // HR Submodules
-import Employees from "./pages/HR/Employees";
+
 import Attendance from "./pages/HR/Attendance";
 import Payroll from "./pages/HR/Payroll";
-import Salary from "./pages/HR/Salary";
 import Leaves from "./pages/HR/Leaves";
 import Performance from "./pages/HR/Performance";
+import EmploymentManagement from "./pages/HR/EmployeeManagement";
 
 // Finance
 import GeneralLedger from "./pages/Finance/GeneralLedger";
@@ -40,6 +40,26 @@ import AccountPayable from "./pages/Finance/AccountsPayable";
 import AccountReceivable from "./pages/Finance/AccountsReceivable";
 import TaxationCompliance from "./pages/Finance/TaxationCompliance";
 import FinancialReports from "./pages/Finance/Reports";
+
+// Sales
+import CustomerMaster from "./pages/Sales/CustomerMaster";
+import SalesOrder from "./pages/Sales/SalesOrder";
+import Invoice from "./pages/Sales/Invoice";
+import Shipping from "./pages/Sales/ShippingDelivery";
+import SalesAnalytics from "./pages/Sales/SalesAnalytics";
+import Returns from "./pages/Sales/Returns";
+
+//Inventory
+import InventoryDashboard from "./pages/Inventory/Dashboard";
+import StockManagement from "./pages/Inventory/StockManagement";
+import StockTransactions from "./pages/Inventory/StockTransactions";
+import PurchaseManagement from "./pages/Inventory/PurchaseManagement";
+import WarehouseBins from "./pages/Inventory/Warehouse";
+import Products from "./pages/Inventory/Products";
+import Suppliers from "./pages/Inventory/Suppliers";
+import Reports from "./pages/Inventory/Reports";
+import { FinanceProvider } from "./context/FinanceContext";
+
 /* ------------------------------------------------------------------ */
 /* Layout (Navbar + Sidebar + Main) */
 /* ------------------------------------------------------------------ */
@@ -88,20 +108,143 @@ const AppRoutes = () => {
 
                   {/* Inventory */}
                   <Route
-                    path="/inventory"
+                    path="/inventory/dashboard"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <Inventory />
+                        <OrderShippingProvider>
+                          <InventoryDashboard />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/stock"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <StockManagement />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/st"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <StockTransactions />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/purchase_manage"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <PurchaseManagement />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/warehouse"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <WarehouseBins />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/products"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <Products />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/suppliers"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <Suppliers />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/inventory/reports"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <Reports />
+                        </OrderShippingProvider>
                       </ProtectedRoute>
                     }
                   />
 
                   {/* Sales */}
+
                   <Route
-                    path="/sales"
+                    path="/sales/cm"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <Sales />
+                        <OrderShippingProvider>
+                          <CustomerMaster />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/orders"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <SalesOrder />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/invoice"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <Invoice />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/shipping"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <Shipping />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/analytics"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <SalesAnalytics />
+                        </OrderShippingProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/returns"
+                    element={
+                      <ProtectedRoute requireSuperAdmin>
+                        <OrderShippingProvider>
+                          <Returns />
+                        </OrderShippingProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -129,7 +272,7 @@ const AppRoutes = () => {
                     path="/hr/employees"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <Employees />
+                        <EmploymentManagement />
                       </ProtectedRoute>
                     }
                   />
@@ -165,14 +308,6 @@ const AppRoutes = () => {
                       </ProtectedRoute>
                     }
                   />
-                  <Route
-                    path="/hr/employee"
-                    element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Employees />
-                      </ProtectedRoute>
-                    }
-                  />
 
                   {/* Finance */}
                   <Route
@@ -187,7 +322,9 @@ const AppRoutes = () => {
                     path="/finance/ledger"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <GeneralLedger />
+                        <FinanceProvider>
+                          <GeneralLedger />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -195,7 +332,9 @@ const AppRoutes = () => {
                     path="/finance/ap"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <AccountPayable />
+                        <FinanceProvider>
+                          <AccountPayable />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -203,7 +342,9 @@ const AppRoutes = () => {
                     path="/finance/ar"
                     element={
                       <ProtectedRoute requireSuperAdmin>
-                        <AccountReceivable />
+                        <FinanceProvider>
+                          <AccountReceivable />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
