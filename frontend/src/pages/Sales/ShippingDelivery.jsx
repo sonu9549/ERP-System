@@ -15,8 +15,8 @@ import {
   Printer,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
-import { useOrderShipping } from "../../context/OrderShippingContext";
-import { carriers } from "../../data/mockData";
+import { useSales } from "../../context/SalesContext";
+import { carriers } from "../../data/salesData";
 
 const formatRevenue = (value) => {
   if (!value) return "$0";
@@ -29,7 +29,7 @@ const formatRevenue = (value) => {
 
 export default function Shipping() {
   const { orders, shipments, setShipments, setOrders, updateShipmentStatus } =
-    useOrderShipping();
+    useSales();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [currentPage, setCurrentPage] = useState(1);

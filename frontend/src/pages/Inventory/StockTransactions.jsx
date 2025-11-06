@@ -1,5 +1,4 @@
-// src/pages/inventory/StockTransactions.jsx
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import {
   Package,
   ArrowDown,
@@ -11,7 +10,7 @@ import { useState } from "react";
 
 export default function StockTransactions() {
   const { products, warehouses, bins, addStockTransaction, stockLedger } =
-    useOrderShipping();
+    useSales();
   const [type, setType] = useState("receipt");
   const [form, setForm] = useState({
     product_id: "",

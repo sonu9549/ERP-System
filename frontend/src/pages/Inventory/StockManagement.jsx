@@ -1,5 +1,4 @@
-// src/pages/inventory/StockManagement.jsx
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import {
   Package,
   History,
@@ -13,7 +12,7 @@ import { useState, useMemo } from "react";
 
 export default function StockManagement() {
   const { products, warehouses, bins, stockLedger, addStockTransaction } =
-    useOrderShipping();
+    useSales();
   const [activeTab, setActiveTab] = useState("ledger");
 
   // === Transaction Form State ===

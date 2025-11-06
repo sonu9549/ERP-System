@@ -5,23 +5,20 @@ import {
   Route,
   Navigate,
 } from "react-router-dom";
-import { OrderShippingProvider } from "./context/OrderShippingContext";
+import { SalesProvider } from "./context/SalesContext";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
-import { ProtectedRoute } from "./components/ProtectedRoute";
-import { Login } from "./pages/Login";
+import ProtectedRoute from "./components/ProtectedRoute";
+import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 
 // Super Admin Modules
 
-import CRM from "./pages/CRM/CRM";
 import HR from "./pages/HR/HR";
 import Finance from "./pages/Finance/Finance";
-import QualityManagement from "./pages/QualityManagement/QualityManagement";
-import Logistics from "./pages/Logistics/Logistics";
-import Production from "./pages/Production/Production";
+
 import Procurement from "./pages/Procurement/Procurement";
 import Settings from "./pages/Settings";
 import Multibranch from "./pages/Multibranch/Multibranch";
@@ -40,6 +37,7 @@ import AccountPayable from "./pages/Finance/AccountsPayable";
 import AccountReceivable from "./pages/Finance/AccountsReceivable";
 import TaxationCompliance from "./pages/Finance/TaxationCompliance";
 import FinancialReports from "./pages/Finance/Reports";
+import FixedAssets from "./pages/Finance/AssetManagement";
 
 // Sales
 import CustomerMaster from "./pages/Sales/CustomerMaster";
@@ -59,13 +57,41 @@ import Products from "./pages/Inventory/Products";
 import Suppliers from "./pages/Inventory/Suppliers";
 import Reports from "./pages/Inventory/Reports";
 import { FinanceProvider } from "./context/FinanceContext";
+import BudgetsForecasting from "./pages/Finance/BudgetsForecasting";
+import CostAccounting from "./pages/Finance/CostAccounting";
+import FinanceSupplyChain from "./pages/Finance/Fscm";
+import LeadsOpportunity from "./pages/CRM/LeadsOpportunity";
+import CustomerSupport from "./pages/CRM/CustomerSupport";
+import SalesEngagement from "./pages/CRM/SalesEngagement";
+import LoyaltyProgram from "./pages/CRM/LoyltyPrograms";
+import CrmAnalytics from "./pages/CRM/CrmAnalytics";
+import OnboardingModule from "./pages/HR/OnboardingModule";
+import { IncomingQualityControl } from "./pages/QualityManagement/IncomingQualityInspection";
+import { QualityProvider } from "./context/QualityContext";
+import { InProcessQualityControl } from "./pages/QualityManagement/InProcessQualityControl";
+import { FinalQualityControl } from "./pages/QualityManagement/FinalQualityControl";
+import { InspectionPlan } from "./pages/QualityManagement/InspectionPlan";
+import { NonConformanceManagement } from "./pages/QualityManagement/NCM";
+import { QualityCertificate } from "./pages/QualityManagement/QualityCertificate";
+import SalesDashboard from "./pages/Sales/SalesDashboard";
+import WarehouseManagement from "./pages/Logistics/WarehouseMangement";
+import PlanningAndScheduling from "./pages/Production/PlanningAndScheduling";
+import { ProductionProvider } from "./context/ProductionContext";
+import BOMManagement from "./pages/Production/BOM";
+import WorkOrders from "./pages/Production/WorkOrders";
+import ShopFloor from "./pages/Production/ShopFloor";
+import QualityControl from "./pages/Production/QualityControl";
+import InventoryManagement from "./pages/Production/InventoryManagement";
+import ReportingAnalytics from "./pages/Production/ReportingAnalytics";
+import WasteManagement from "./pages/Production/WasteManagement";
+import MaterialConsumption from "./pages/Production/MaterialConsumption";
+import CostValuation from "./pages/Production/CostValuation";
 
 /* ------------------------------------------------------------------ */
 /* Layout (Navbar + Sidebar + Main) */
 /* ------------------------------------------------------------------ */
 const Layout = ({ children }) => (
   <div className="flex flex-col h-screen bg-gray-50 text-gray-800">
-    {/* Navbar */}
     <Navbar />
 
     {/* Main Layout */}
@@ -110,110 +136,120 @@ const AppRoutes = () => {
                   <Route
                     path="/inventory/dashboard"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <InventoryDashboard />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/stock"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <StockManagement />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/st"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <StockTransactions />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/purchase_manage"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <PurchaseManagement />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/warehouse"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <WarehouseBins />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/products"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <Products />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/suppliers"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <Suppliers />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/inventory/reports"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <Reports />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
 
                   {/* Sales */}
+                  <Route
+                    path="/sales"
+                    element={
+                      <ProtectedRoute>
+                        <SalesProvider>
+                          <SalesDashboard />
+                        </SalesProvider>
+                      </ProtectedRoute>
+                    }
+                  />
 
                   <Route
                     path="/sales/cm"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <CustomerMaster />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/sales/orders"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <SalesOrder />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/sales/invoice"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <Invoice />
                       </ProtectedRoute>
                     }
@@ -221,40 +257,90 @@ const AppRoutes = () => {
                   <Route
                     path="/sales/shipping"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <Shipping />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/sales/analytics"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <SalesAnalytics />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/sales/returns"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <OrderShippingProvider>
+                      <ProtectedRoute>
+                        <SalesProvider>
                           <Returns />
-                        </OrderShippingProvider>
+                        </SalesProvider>
                       </ProtectedRoute>
                     }
                   />
 
                   {/* CRM */}
                   <Route
-                    path="/crm"
+                    path="/crm/cm"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <CRM />
+                      <ProtectedRoute>
+                        <CustomerMaster />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/crm/leads"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <LeadsOpportunity />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/crm/customer-support"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <CustomerSupport />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/crm/sef"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <SalesEngagement />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/crm/loyalty"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <LoyaltyProgram />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/crm/analytics"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <CrmAnalytics />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -263,7 +349,7 @@ const AppRoutes = () => {
                   <Route
                     path="/hr"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <HR />
                       </ProtectedRoute>
                     }
@@ -271,31 +357,37 @@ const AppRoutes = () => {
                   <Route
                     path="/hr/employees"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <EmploymentManagement />
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <EmploymentManagement />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/hr/attendance"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Attendance />
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <Attendance />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/hr/payroll"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Payroll />
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <Payroll />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
                   <Route
                     path="/hr/leave"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <Leaves />
                       </ProtectedRoute>
                     }
@@ -303,8 +395,20 @@ const AppRoutes = () => {
                   <Route
                     path="/hr/performance"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Performance />
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <Performance />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/hr/recruitment"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <OnboardingModule />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -313,7 +417,7 @@ const AppRoutes = () => {
                   <Route
                     path="/finance"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <Finance />
                       </ProtectedRoute>
                     }
@@ -321,7 +425,7 @@ const AppRoutes = () => {
                   <Route
                     path="/finance/ledger"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <FinanceProvider>
                           <GeneralLedger />
                         </FinanceProvider>
@@ -331,7 +435,7 @@ const AppRoutes = () => {
                   <Route
                     path="/finance/ap"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <FinanceProvider>
                           <AccountPayable />
                         </FinanceProvider>
@@ -341,7 +445,7 @@ const AppRoutes = () => {
                   <Route
                     path="/finance/ar"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <FinanceProvider>
                           <AccountReceivable />
                         </FinanceProvider>
@@ -351,7 +455,10 @@ const AppRoutes = () => {
                   <Route
                     path="/finance/taxcomp"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <TaxationCompliance />
+                        </FinanceProvider>
                         <TaxationCompliance />
                       </ProtectedRoute>
                     }
@@ -359,38 +466,224 @@ const AppRoutes = () => {
                   <Route
                     path="/finance/reports"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <FinancialReports />
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <FinancialReports />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/fam"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <FixedAssets />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/bf"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <BudgetsForecasting />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/co"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <CostAccounting />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/fscm"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <FinanceSupplyChain />
+                        </FinanceProvider>
                       </ProtectedRoute>
                     }
                   />
 
                   {/* Quality Management */}
                   <Route
-                    path="/quality"
+                    path="/quality/iqc"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <QualityManagement />
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <IncomingQualityControl />
+                        </QualityProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/quality/ipqc"
+                    element={
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <InProcessQualityControl />
+                        </QualityProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/quality/fqc"
+                    element={
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <FinalQualityControl />
+                        </QualityProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/quality/ip"
+                    element={
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <InspectionPlan />
+                        </QualityProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/quality/ncm"
+                    element={
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <NonConformanceManagement />
+                        </QualityProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/quality/qc"
+                    element={
+                      <ProtectedRoute>
+                        <QualityProvider>
+                          <QualityCertificate />
+                        </QualityProvider>
                       </ProtectedRoute>
                     }
                   />
 
                   {/* Logistics */}
                   <Route
-                    path="/logistics"
+                    path="/logistics/warehouse"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Logistics />
+                      <ProtectedRoute>
+                        <WarehouseManagement />
                       </ProtectedRoute>
                     }
                   />
 
                   {/* Production */}
                   <Route
-                    path="/production"
+                    path="/production/ps"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
-                        <Production />
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <PlanningAndScheduling />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/bom"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <BOMManagement />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/wo"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <WorkOrders />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/sfm"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <ShopFloor />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/qc"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <QualityControl />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/im"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <InventoryManagement />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/reporting"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <ReportingAnalytics />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/wm"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <WasteManagement />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/mct"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <MaterialConsumption />
+                        </ProductionProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/production/cv"
+                    element={
+                      <ProtectedRoute>
+                        <ProductionProvider>
+                          <CostValuation />
+                        </ProductionProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -399,7 +692,7 @@ const AppRoutes = () => {
                   <Route
                     path="/procurement"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <Procurement />
                       </ProtectedRoute>
                     }
@@ -417,7 +710,7 @@ const AppRoutes = () => {
                   <Route
                     path="/multibranch"
                     element={
-                      <ProtectedRoute requireSuperAdmin>
+                      <ProtectedRoute>
                         <Multibranch />
                       </ProtectedRoute>
                     }

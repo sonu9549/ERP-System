@@ -1,447 +1,438 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
-import { format, startOfYear, endOfYear, parseISO } from "date-fns";
-import Papa from "papaparse";
+// src/components/FinanceReport.jsx
+import React, { useState, useRef } from "react";
+import { format } from "date-fns";
 import { useReactToPrint } from "react-to-print";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from "recharts";
+import { useFinance } from "../../context/FinanceContext";
 
-const FinancialReports = ({ accounts = [], journalEntries = [] }) => {
-  const [activeTab, setActiveTab] = useState("core");
-  const [branchFilter, setBranchFilter] = useState("All");
-  const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
-  const [fromDate, setFromDate] = useState(`${yearFilter}-01-01`);
-  const [toDate, setToDate] = useState(`${yearFilter}-12-31`);
-  const [reportTemplates, setReportTemplates] = useState([]);
-
+const FinanceReport = () => {
+  const {
+    chartOfAccounts,
+    journalEntries,
+    getBalance,
+    formatCurrency,
+    getAccount,
+  } = useFinance();
   const printRef = useRef();
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [activeTab, setActiveTab] = useState("dashboard");
 
-  const tabs = [
-    { id: "core", label: "Core Statements" },
-    { id: "management", label: "Management Reports" },
-    { id: "audit", label: "Audit Reports" },
-    { id: "custom", label: "Custom Reports" },
-  ];
-
-  const branches = ["HQ", "Unit A", "Unit B"];
-
-  // Load saved templates
-  useEffect(() => {
-    const saved = JSON.parse(localStorage.getItem("report_templates")) || [];
-    setReportTemplates(saved);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("report_templates", JSON.stringify(reportTemplates));
-  }, [reportTemplates]);
-
-  // Filter journal entries
-  const filteredEntries = useMemo(() => {
-    return journalEntries.filter((e) => {
-      const date = new Date(e.date);
-      const inRange = date >= new Date(fromDate) && date <= new Date(toDate);
-      const branchMatch = branchFilter === "All" || e.branch === branchFilter;
-      return inRange && branchMatch;
-    });
-  }, [journalEntries, fromDate, toDate, branchFilter]);
-
-  // Balance calculator
-  const getBalance = (accountId) => {
-    return filteredEntries
-      .flatMap((e) => e.lines)
-      .filter((l) => l.accountId === accountId)
-      .reduce((sum, l) => sum + l.debit - l.credit, 0);
-  };
+  const fromDate = `${year}-01-01`;
+  const toDate = `${year}-12-31`;
 
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
+    documentTitle: `Finance_Report_${year}`,
   });
 
-  const exportCSV = (data, filename) => {
-    const csv = Papa.unparse(data);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
+  const exportPDF = (title, data) => {
+    const doc = new jsPDF();
+    doc.setFontSize(16);
+    doc.text(title, 15, 15);
+    doc.setFontSize(10);
+    doc.text(`Year: ${year} | ${format(new Date(), "dd MMM yyyy")}`, 15, 25);
+
+    const rows = data.map((d) => [d.name, formatCurrency(d.amount)]);
+    doc.autoTable({
+      head: [["Account", "Amount"]],
+      body: rows,
+      startY: 35,
+      theme: "striped",
+    });
+    doc.save(`${title}_${year}.pdf`);
   };
 
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <header className="flex flex-col md:flex-row justify-between mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">Financial Reports</h1>
-        <div className="flex flex-wrap gap-3 items-center">
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option>All</option>
-            {branches.map((b) => (
-              <option key={b}>{b}</option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={fromDate}
-            onChange={(e) => setFromDate(e.target.value)}
-            className="border p-2 rounded"
-          />
-          <input
-            type="date"
-            value={toDate}
-            onChange={(e) => setToDate(e.target.value)}
-            className="border p-2 rounded"
-          />
-          <button
-            onClick={handlePrint}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Print
-          </button>
-        </div>
-      </header>
+  // Calculations
+  const income = chartOfAccounts.filter((a) => a.type === "Income");
+  const expense = chartOfAccounts.filter((a) => a.type === "Expense");
 
-      <nav className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
-              activeTab === tab.id
-                ? "bg-blue-600 text-white shadow"
-                : "bg-white border text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      <div ref={printRef} className="bg-white rounded-xl shadow p-6">
-        <div className="mb-4 text-center">
-          <h2 className="text-2xl font-bold">Company Name</h2>
-          <p className="text-sm text-gray-600">
-            {branchFilter !== "All" ? `${branchFilter} • ` : ""}
-            {format(parseISO(fromDate), "dd MMM yyyy")} to{" "}
-            {format(parseISO(toDate), "dd MMM yyyy")}
-          </p>
-        </div>
-
-        {activeTab === "core" && (
-          <CoreStatements
-            accounts={accounts}
-            getBalance={getBalance}
-            exportCSV={exportCSV}
-          />
-        )}
-        {activeTab === "management" && (
-          <ManagementReports
-            accounts={accounts}
-            filteredEntries={filteredEntries}
-            branchFilter={branchFilter}
-            exportCSV={exportCSV}
-          />
-        )}
-        {activeTab === "audit" && (
-          <AuditReports
-            journalEntries={journalEntries}
-            fromDate={fromDate}
-            toDate={toDate}
-            exportCSV={exportCSV}
-          />
-        )}
-        {activeTab === "custom" && (
-          <CustomReports
-            accounts={accounts}
-            filteredEntries={filteredEntries}
-            reportTemplates={reportTemplates}
-            setReportTemplates={setReportTemplates}
-            exportCSV={exportCSV}
-          />
-        )}
-      </div>
-    </div>
-  );
-};
-
-/* ====================== SUB COMPONENTS ====================== */
-
-const CoreStatements = ({ accounts, getBalance, exportCSV }) => {
-  const assets = accounts.filter((a) => a.type === "Asset");
-  const liabilities = accounts.filter((a) => a.type === "Liability");
-  const equity = accounts.filter((a) => a.type === "Equity");
-  const income = accounts.filter((a) => a.type === "Income");
-  const expense = accounts.filter((a) => a.type === "Expense");
-
-  const totalAssets = assets.reduce(
-    (s, a) => s + Math.max(getBalance(a.id), 0),
-    0
-  );
-  const totalLiabilities = liabilities.reduce(
-    (s, a) => s + Math.max(-getBalance(a.id), 0),
-    0
-  );
-  const totalEquity = equity.reduce(
-    (s, a) => s + Math.max(getBalance(a.id), 0),
-    0
-  );
   const totalIncome = income.reduce(
-    (s, a) => s + Math.max(getBalance(a.id), 0),
+    (s, a) => s + Math.max(getBalance(a.name, { fromDate, toDate }), 0),
     0
   );
   const totalExpense = expense.reduce(
-    (s, a) => s + Math.max(-getBalance(a.id), 0),
+    (s, a) => s + Math.max(-getBalance(a.name, { fromDate, toDate }), 0),
     0
   );
   const netProfit = totalIncome - totalExpense;
 
-  return (
-    <div className="space-y-8">
-      {/* Balance Sheet */}
-      <div>
-        <h3 className="text-xl font-bold mb-3 border-b pb-2">Balance Sheet</h3>
-        <table className="w-full border-collapse text-sm">
-          <tbody>
-            <tr>
-              <td colSpan={2} className="font-semibold py-2">
-                Assets
-              </td>
-            </tr>
-            {assets.map((a) => (
-              <tr key={a.id}>
-                <td className="pl-4">{a.name}</td>
-                <td className="text-right">
-                  ₹{getBalance(a.id).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t">
-              <td>Total Assets</td>
-              <td className="text-right">₹{totalAssets.toLocaleString()}</td>
-            </tr>
+  const monthlyData = Array.from({ length: 12 }, (_, i) => {
+    const m = String(i + 1).padStart(2, "0");
+    const inc = income.reduce(
+      (s, a) =>
+        s +
+        Math.max(
+          getBalance(a.name, {
+            fromDate: `${year}-${m}-01`,
+            toDate: `${year}-${m}-31`,
+          }),
+          0
+        ),
+      0
+    );
+    const exp = expense.reduce(
+      (s, a) =>
+        s +
+        Math.max(
+          -getBalance(a.name, {
+            fromDate: `${year}-${m}-01`,
+            toDate: `${year}-${m}-31`,
+          }),
+          0
+        ),
+      0
+    );
+    return {
+      month: format(new Date(year, i), "MMM"),
+      income: inc,
+      expense: exp,
+    };
+  });
 
-            <tr>
-              <td colSpan={2} className="font-semibold py-2 pt-6">
-                Liabilities & Equity
-              </td>
-            </tr>
-            {liabilities.map((a) => (
-              <tr key={a.id}>
-                <td className="pl-4">{a.name}</td>
-                <td className="text-right">
-                  ₹{Math.abs(getBalance(a.id)).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            {equity.map((a) => (
-              <tr key={a.id}>
-                <td className="pl-4">{a.name}</td>
-                <td className="text-right">
-                  ₹{getBalance(a.id).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t">
-              <td>Total Liabilities & Equity</td>
-              <td className="text-right">
-                ₹{(totalLiabilities + totalEquity + netProfit).toLocaleString()}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      {/* P&L */}
-      <div>
-        <h3 className="text-xl font-bold mb-3 border-b pb-2">
-          Profit & Loss Statement
-        </h3>
-        <table className="w-full border-collapse text-sm">
-          <tbody>
-            {income.map((a) => (
-              <tr key={a.id}>
-                <td>{a.name}</td>
-                <td className="text-right">
-                  ₹{getBalance(a.id).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t">
-              <td>Total Income</td>
-              <td className="text-right">₹{totalIncome.toLocaleString()}</td>
-            </tr>
-            {expense.map((a) => (
-              <tr key={a.id}>
-                <td>{a.name}</td>
-                <td className="text-right">
-                  ₹{Math.abs(getBalance(a.id)).toLocaleString()}
-                </td>
-              </tr>
-            ))}
-            <tr className="font-bold border-t">
-              <td>Total Expense</td>
-              <td className="text-right">₹{totalExpense.toLocaleString()}</td>
-            </tr>
-            <tr className="font-bold text-lg border-t">
-              <td>Net Profit</td>
-              <td className="text-right">₹{netProfit.toLocaleString()}</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <button
-        onClick={() =>
-          exportCSV(
-            [...assets, ...liabilities, ...equity, ...income, ...expense].map(
-              (a) => ({
-                Account: a.name,
-                Type: a.type,
-                Balance: getBalance(a.id),
-              })
-            ),
-            "financial_statements.csv"
-          )
-        }
-        className="bg-green-600 text-white px-4 py-2 rounded"
-      >
-        Export to Excel
-      </button>
-    </div>
-  );
-};
-
-const ManagementReports = ({
-  accounts,
-  filteredEntries,
-  branchFilter,
-  exportCSV,
-}) => {
-  const costCenters = [
-    ...new Set(
-      filteredEntries
-        .flatMap((e) => e.lines.map((l) => l.costCenter))
-        .filter(Boolean)
-    ),
+  const pieData = [
+    { name: "Income", value: totalIncome, color: "#3b82f6" },
+    { name: "Expense", value: totalExpense, color: "#ef4444" },
   ];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-xl font-bold mb-3">Branch Performance</h3>
-        <p className="text-sm text-gray-600 mb-2">Profit & Loss by Branch</p>
-        {/* Simplified */}
-        <p className="font-semibold">
-          {branchFilter} Net Profit: ₹
-          {(Math.random() * 100000).toLocaleString()}
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 p-4">
+      <div ref={printRef} className="max-w-6xl mx-auto bg-white">
+        {/* Header */}
+        <div className="border-b-4 border-blue-600 p-6 bg-white">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">
+                Finance Report
+              </h1>
+              <p className="text-gray-600">Financial Year {year}</p>
+            </div>
+            <input
+              type="number"
+              value={year}
+              onChange={(e) => setYear(+e.target.value)}
+              className="w-24 px-3 py-2 border rounded text-center font-bold"
+            />
+          </div>
+        </div>
 
-      <div>
-        <h3 className="text-xl font-bold mb-3">Cost Center Analysis</h3>
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="bg-gray-100">
-              <th>Cost Center</th>
-              <th>Expense</th>
-            </tr>
-          </thead>
-          <tbody>
-            {costCenters.map((cc) => {
-              const expense = filteredEntries
-                .flatMap((e) => e.lines)
-                .filter(
-                  (l) =>
-                    l.costCenter === cc &&
-                    accounts.find((a) => a.id === l.accountId)?.type ===
-                      "Expense"
-                )
-                .reduce((s, l) => s + l.debit, 0);
-              return (
-                <tr key={cc}>
-                  <td>{cc}</td>
-                  <td className="text-right">₹{expense.toLocaleString()}</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
+        {/* Buttons */}
+        <div className="p-4 bg-gray-100 flex gap-3">
+          <button
+            onClick={handlePrint}
+            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Print
+          </button>
+          <button
+            onClick={() =>
+              exportPDF("Profit_Loss", [
+                { name: "Total Income", amount: totalIncome },
+                { name: "Total Expense", amount: totalExpense },
+                {
+                  name: netProfit >= 0 ? "Net Profit" : "Net Loss",
+                  amount: Math.abs(netProfit),
+                },
+              ])
+            }
+            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Export PDF
+          </button>
+        </div>
 
-const AuditReports = ({ journalEntries, fromDate, toDate, exportCSV }) => {
-  const closingEntries = journalEntries.filter((e) => e.ref === "CLOSING");
-
-  return (
-    <div>
-      <h3 className="text-xl font-bold mb-3">Year-End Closing Entries</h3>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th>Date</th>
-            <th>Description</th>
-            <th>Amount</th>
-          </tr>
-        </thead>
-        <tbody>
-          {closingEntries.map((e) => (
-            <tr key={e.id}>
-              <td>{e.date}</td>
-              <td>{e.desc}</td>
-              <td className="text-right">
-                ₹{e.lines.reduce((s, l) => s + l.debit, 0).toLocaleString()}
-              </td>
-            </tr>
+        {/* Tabs */}
+        <div className="border-b">
+          {["dashboard", "pl", "bs", "cash", "ratios"].map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={`px-6 py-3 font-medium ${
+                activeTab === tab
+                  ? "border-b-4 border-blue-600 text-blue-600"
+                  : "text-gray-600"
+              }`}
+            >
+              {tab === "dashboard"
+                ? "Dashboard"
+                : tab === "pl"
+                ? "Profit & Loss"
+                : tab === "bs"
+                ? "Balance Sheet"
+                : tab === "cash"
+                ? "Cash Flow"
+                : "Ratios"}
+            </button>
           ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
+        </div>
 
-const CustomReports = ({
-  accounts,
-  filteredEntries,
-  reportTemplates,
-  setReportTemplates,
-  exportCSV,
-}) => {
-  const [templateName, setTemplateName] = useState("");
+        {/* Content */}
+        <div className="p-6">
+          {activeTab === "dashboard" && (
+            <div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-blue-50 p-6 rounded border">
+                  <p className="text-sm text-gray-600">Total Income</p>
+                  <p className="text-2xl font-bold text-blue-600">
+                    {formatCurrency(totalIncome)}
+                  </p>
+                </div>
+                <div className="bg-red-50 p-6 rounded border">
+                  <p className="text-sm text-gray-600">Total Expense</p>
+                  <p className="text-2xl font-bold text-red-600">
+                    {formatCurrency(totalExpense)}
+                  </p>
+                </div>
+                <div
+                  className={`p-6 rounded border ${
+                    netProfit >= 0 ? "bg-green-50" : "bg-orange-50"
+                  }`}
+                >
+                  <p className="text-sm text-gray-600">
+                    {netProfit >= 0 ? "Net Profit" : "Net Loss"}
+                  </p>
+                  <p
+                    className={`text-2xl font-bold ${
+                      netProfit >= 0 ? "text-green-600" : "text-orange-600"
+                    }`}
+                  >
+                    {formatCurrency(Math.abs(netProfit))}
+                  </p>
+                </div>
+              </div>
 
-  const saveTemplate = () => {
-    const template = {
-      id: Date.now(),
-      name: templateName,
-      fromDate,
-      toDate,
-      branchFilter,
-      accounts: accounts.map((a) => a.id),
-    };
-    setReportTemplates((prev) => [...prev, template]);
-    setTemplateName("");
-  };
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="bg-white p-4 border rounded">
+                  <h3 className="font-bold mb-4 text-center">Monthly Trend</h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <BarChart data={monthlyData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="month" />
+                      <YAxis />
+                      <Tooltip formatter={formatCurrency} />
+                      <Bar dataKey="income" fill="#3b82f6" />
+                      <Bar dataKey="expense" fill="#ef4444" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
 
-  return (
-    <div>
-      <h3 className="text-xl font-bold mb-3">Custom Report Builder</h3>
-      <div className="mb-4">
-        <input
-          placeholder="Template Name"
-          value={templateName}
-          onChange={(e) => setTemplateName(e.target.value)}
-          className="border p-2 rounded mr-2"
-        />
-        <button
-          onClick={saveTemplate}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
-        >
-          Save Template
-        </button>
+                <div className="bg-white p-4 border rounded">
+                  <h3 className="font-bold mb-4 text-center">
+                    Income vs Expense
+                  </h3>
+                  <ResponsiveContainer width="100%" height={250}>
+                    <PieChart>
+                      <Pie
+                        data={pieData}
+                        dataKey="value"
+                        nameKey="name"
+                        outerRadius={80}
+                        label
+                      >
+                        {pieData.map((e, i) => (
+                          <Cell key={i} fill={e.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={formatCurrency} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "pl" && (
+            <div className="bg-white border rounded p-6">
+              <h2 className="text-2xl font-bold mb-4">Profit & Loss</h2>
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="text-left p-3 border">Account</th>
+                    <th className="text-right p-3 border">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {income.map((a) => (
+                    <tr key={a.id}>
+                      <td className="p-3 border">{a.name}</td>
+                      <td className="text-right p-3 border">
+                        {formatCurrency(
+                          Math.max(getBalance(a.name, { fromDate, toDate }), 0)
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold bg-blue-50">
+                    <td className="p-3">Total Income</td>
+                    <td className="text-right p-3">
+                      {formatCurrency(totalIncome)}
+                    </td>
+                  </tr>
+                  {expense.map((a) => (
+                    <tr key={a.id}>
+                      <td className="p-3 border">{a.name}</td>
+                      <td className="text-right p-3 border">
+                        {formatCurrency(
+                          Math.max(-getBalance(a.name, { fromDate, toDate }), 0)
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="font-bold bg-red-50">
+                    <td className="p-3">Total Expense</td>
+                    <td className="text-right p-3">
+                      {formatCurrency(totalExpense)}
+                    </td>
+                  </tr>
+                  <tr
+                    className={`font-bold text-xl ${
+                      netProfit >= 0 ? "bg-green-100" : "bg-red-100"
+                    }`}
+                  >
+                    <td className="p-4">
+                      {netProfit >= 0 ? "NET PROFIT" : "NET LOSS"}
+                    </td>
+                    <td className="text-right p-4">
+                      {formatCurrency(Math.abs(netProfit))}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "bs" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white border rounded p-6">
+                <h3 className="font-bold text-xl mb-4">ASSETS</h3>
+                {chartOfAccounts
+                  .filter((a) => a.type === "Asset")
+                  .map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex justify-between py-2 border-b"
+                    >
+                      <span>{a.name}</span>
+                      <span>
+                        {formatCurrency(
+                          getBalance(a.name, { fromDate, toDate })
+                        )}
+                      </span>
+                    </div>
+                  ))}
+                <div className="font-bold mt-4 pt-4 border-t-2 border-blue-600">
+                  Total:{" "}
+                  {formatCurrency(
+                    chartOfAccounts
+                      .filter((a) => a.type === "Asset")
+                      .reduce(
+                        (s, a) => s + getBalance(a.name, { fromDate, toDate }),
+                        0
+                      )
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-white border rounded p-6">
+                <h3 className="font-bold text-xl mb-4">LIABILITIES & EQUITY</h3>
+                {chartOfAccounts
+                  .filter((a) => ["Liability", "Equity"].includes(a.type))
+                  .map((a) => (
+                    <div
+                      key={a.id}
+                      className="flex justify-between py-2 border-b"
+                    >
+                      <span>{a.name}</span>
+                      <span>
+                        {formatCurrency(
+                          getBalance(a.name, { fromDate, toDate })
+                        )}
+                      </span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "cash" && (
+            <div className="bg-white border rounded p-6">
+              <h3 className="font-bold text-xl mb-4">Cash Flow</h3>
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="p-3 text-left">Date</th>
+                    <th className="p-3 text-left">Desc</th>
+                    <th className="p-3 text-right">In</th>
+                    <th className="p-3 text-right">Out</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {journalEntries
+                    .flatMap((e) =>
+                      e.lines.map((l) => ({ ...l, date: e.date, desc: e.desc }))
+                    )
+                    .filter((t) =>
+                      ["Cash", "Bank"].some(
+                        (name) => getAccount(name)?.id === t.accountId
+                      )
+                    )
+                    .sort((a, b) => a.date.localeCompare(b.date))
+                    .map((t, i) => (
+                      <tr key={i} className="border-b">
+                        <td className="p-3">
+                          {format(new Date(t.date), "dd MMM")}
+                        </td>
+                        <td className="p-3">{t.desc}</td>
+                        <td className="p-3 text-right text-green-600">
+                          {t.debit ? formatCurrency(t.debit) : ""}
+                        </td>
+                        <td className="p-3 text-right text-red-600">
+                          {t.credit ? formatCurrency(t.credit) : ""}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {activeTab === "ratios" && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white border p-6 rounded text-center">
+                <p className="text-gray-600">Profit Margin</p>
+                <p className="text-3xl font-bold text-blue-600">
+                  {totalIncome
+                    ? ((netProfit / totalIncome) * 100).toFixed(1)
+                    : 0}
+                  %
+                </p>
+              </div>
+              <div className="bg-white border p-6 rounded text-center">
+                <p className="text-gray-600">Current Ratio</p>
+                <p className="text-3xl font-bold text-green-600">1.8</p>
+              </div>
+              <div className="bg-white border p-6 rounded text-center">
+                <p className="text-gray-600">Growth</p>
+                <p className="text-3xl font-bold text-purple-600">+15%</p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      <p>Custom report logic can be built here using filters above.</p>
     </div>
   );
 };
 
-export default FinancialReports;
+export default FinanceReport;

@@ -1,12 +1,14 @@
 // src/components/GeneralLedger.jsx
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { format, parseISO } from "date-fns";
-import Papa from "papaparse";
-import { useFinance } from "../../context/FinanceContext"; // <-- Shared context
+import { useReactToPrint } from "react-to-print";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
+import { useFinance } from "../../context/FinanceContext";
 
-const CURRENCY = "INR";
-const EXCHANGE_RATES = { USD: 83.5, EUR: 90.2 }; // Mock rates (kept for possible future use)
-
+/* ============================================= */
+/*               MAIN COMPONENT                  */
+/* ============================================= */
 const GeneralLedger = () => {
   const {
     chartOfAccounts,
@@ -15,373 +17,354 @@ const GeneralLedger = () => {
     setJournalEntries,
     auditLogs,
     setAuditLogs,
-    postToGL, // generic helper to post debit/credit
+    postToGL,
+    getBalance,
+    formatCurrency,
+    getAccount,
   } = useFinance();
 
-  const [activeTab, setActiveTab] = useState("chart");
-  const [branchFilter, setBranchFilter] = useState("All");
-  const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
-  const [currencyFilter, setCurrencyFilter] = useState("All");
+  /* ---------- PRINT REF ---------- */
+  const printRef = useRef(); // <-- this will be attached to the printable area
+  const [printReady, setPrintReady] = useState(false);
 
-  // Static lists (can be moved to context later)
-  const costCenters = ["Marketing", "R&D", "Admin", "Sales"];
-  const projects = ["Project Alpha", "Project Beta", "None"];
-  const branches = ["HQ", "Unit A", "Unit B"];
-  const currencies = ["INR", "USD", "EUR"];
-  const accountTypes = ["Asset", "Liability", "Equity", "Income", "Expense"];
-  const subTypes = {
-    Asset: ["Cash", "Bank", "Receivable", "Fixed Asset", "Inventory"],
-    Liability: ["Payable", "Loan", "Tax Payable"],
-    Equity: ["Capital", "Retained Earnings"],
-    Income: ["Sales", "Service Income", "Other Income"],
-    Expense: ["COGS", "Operating Expense", "Admin Expense", "Tax"],
+  /* ---------- STATE ---------- */
+  const [activeTab, setActiveTab] = useState("chart");
+  const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
+
+  /* ---------- PRINT HANDLER (created AFTER first render) ---------- */
+  const handlePrint = useReactToPrint({
+    content: () => printRef.current, // <-- always a real DOM node
+    documentTitle: `GL_${activeTab}_${yearFilter}`,
+    pageStyle: `
+      @page { size: A4; margin: 1cm; }
+      @media print { body { -webkit-print-color-scheme: light; } }
+    `,
+  });
+
+  // Enable printing only after the ref is attached
+  useEffect(() => {
+    setPrintReady(true);
+  }, []);
+
+  /* ---------- PDF EXPORT ---------- */
+  const exportPDF = (title, columns, data) => {
+    if (!data?.length) {
+      alert("No data to export!");
+      return;
+    }
+    const doc = new jsPDF("p", "mm", "a4");
+    doc.setFontSize(16);
+    doc.text(title, 15, 15);
+    doc.setFontSize(10);
+    doc.text(
+      `Year: ${yearFilter} | ${format(new Date(), "dd MMM yyyy")}`,
+      15,
+      25
+    );
+
+    const rows = data.map((row) =>
+      columns.map((col) => {
+        const v = row[col.accessor];
+        if (col.format === "currency") return formatCurrency(v || 0);
+        if (col.format === "date") return format(parseISO(v), "dd MMM yyyy");
+        return v ?? "";
+      })
+    );
+
+    doc.autoTable({
+      head: [columns.map((c) => c.Header)],
+      body: rows,
+      startY: 35,
+      theme: "striped",
+      styles: { fontSize: 9 },
+      headStyles: { fillColor: [33, 150, 243] },
+    });
+    doc.save(`${title.replace(/\s+/g, "_")}_${yearFilter}.pdf`);
   };
 
-  const user = { id: 1, name: "admin", ip: "192.168.1.10" };
-
-  const tabs = [
-    { id: "chart", label: "Chart of Accounts" },
-    { id: "journal", label: "Journal Entries" },
-    { id: "opening", label: "Opening Balances" },
-    { id: "trial", label: "Trial Balance" },
-    { id: "ledger", label: "General Ledger" },
-    { id: "reconcile", label: "Reconciliation" },
-    { id: "yearend", label: "Year-End Closing" },
-    { id: "audit", label: "Audit Trail" },
-    { id: "import", label: "Import / Export" },
-  ];
-
-  // --------------------------------------------------------------
-  // Helper: log audit (centralised)
-  // --------------------------------------------------------------
+  /* ---------- AUDIT LOG ---------- */
   const logAudit = (action, details = {}) => {
     const log = {
       timestamp: new Date().toISOString(),
       action,
-      user: user.name,
-      ip: user.ip,
-      details: JSON.stringify(details),
+      user: "Admin",
+      details: JSON.stringify(details), // <-- store as **string**
     };
     setAuditLogs((prev) => [...prev, log]);
   };
 
-  // --------------------------------------------------------------
-  // Balance calculation (memoised)
-  // --------------------------------------------------------------
-  const getBalance = useMemo(() => {
-    return (accountId, year = yearFilter) => {
-      const lines = journalEntries
-        .filter((e) => new Date(e.date).getFullYear() <= year)
-        .flatMap((e) => e.lines);
-
-      const net = lines
-        .filter((l) => l.accountId === accountId)
-        .reduce((sum, l) => sum + l.debit - l.credit, 0);
-
-      const acc = chartOfAccounts.find((a) => a.id === accountId);
-      return acc?.normalBalance === "Debit" ? net : -net;
-    };
-  }, [journalEntries, chartOfAccounts, yearFilter]);
-
-  const filteredAccounts = useMemo(() => {
-    return chartOfAccounts.filter(
-      (acc) =>
-        (branchFilter === "All" || acc.branch === branchFilter) &&
-        (currencyFilter === "All" || acc.currency === currencyFilter)
-    );
-  }, [chartOfAccounts, branchFilter, currencyFilter]);
-
-  // --------------------------------------------------------------
-  // UI
-  // --------------------------------------------------------------
+  /* ---------- RENDER ---------- */
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <header className="flex flex-col md:flex-row justify-between mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">General Ledger</h1>
-        <div className="flex flex-wrap gap-3 items-center">
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option>All</option>
-            {branches.map((b) => (
-              <option key={b}>{b}</option>
-            ))}
-          </select>
-          <select
-            value={currencyFilter}
-            onChange={(e) => setCurrencyFilter(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option>All</option>
-            {currencies.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <input
-            type="number"
-            value={yearFilter}
-            onChange={(e) => setYearFilter(+e.target.value)}
-            className="border p-2 rounded w-20"
-            placeholder="Year"
-          />
+    <div className="min-h-screen bg-gray-100 p-4">
+      {/* ==================== PRINTABLE AREA ==================== */}
+      <div ref={printRef} className="max-w-7xl mx-auto bg-white shadow-lg">
+        {/* HEADER */}
+        <div className="border-b-4 border-blue-700 p-6 bg-gradient-to-r from-blue-50 to-white">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-800">
+                General Ledger
+              </h1>
+              <p className="text-gray-600">Financial Year: {yearFilter}</p>
+            </div>
+            <input
+              type="number"
+              value={yearFilter}
+              onChange={(e) => setYearFilter(+e.target.value)}
+              className="w-24 px-3 py-2 border-2 border-blue-500 rounded text-center font-bold text-blue-700"
+              min="2000"
+              max="2100"
+            />
+          </div>
         </div>
-      </header>
 
-      <nav className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
-        {tabs.map((tab) => (
+        {/* ACTION BUTTONS */}
+        <div className="p-4 bg-gray-50 border-b flex flex-wrap gap-3">
           <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
-              activeTab === tab.id
-                ? "bg-blue-600 text-white shadow"
-                : "bg-white border text-gray-700 hover:bg-gray-100"
-            }`}
+            onClick={handlePrint}
+            disabled={!printReady}
+            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
           >
-            {tab.label}
+            Print
           </button>
-        ))}
-      </nav>
 
-      <div className="bg-white rounded-xl shadow p-6">
-        {activeTab === "chart" && (
-          <ChartOfAccounts
-            accounts={filteredAccounts}
-            accountTypes={accountTypes}
-            subTypes={subTypes}
-            branches={branches}
-            currencies={currencies}
-            setAccounts={setChartOfAccounts}
-            logAudit={logAudit}
-          />
-        )}
-        {activeTab === "journal" && (
-          <JournalEntries
-            accounts={chartOfAccounts}
-            journalEntries={journalEntries}
-            setJournalEntries={setJournalEntries}
-            costCenters={costCenters}
-            projects={projects}
-            branches={branches}
-            currencies={currencies}
-            logAudit={logAudit}
-            postToGL={postToGL}
-          />
-        )}
-        {activeTab === "opening" && (
-          <OpeningBalances
-            accounts={chartOfAccounts}
-            year={yearFilter}
-            setJournalEntries={setJournalEntries}
-            logAudit={logAudit}
-            postToGL={postToGL}
-          />
-        )}
-        {activeTab === "trial" && (
-          <TrialBalance
-            accounts={chartOfAccounts}
-            getBalance={getBalance}
-            year={yearFilter}
-          />
-        )}
-        {activeTab === "ledger" && (
-          <GeneralLedgerReport
-            accounts={chartOfAccounts}
-            journalEntries={journalEntries}
-            year={yearFilter}
-          />
-        )}
-        {activeTab === "reconcile" && (
-          <AccountReconciliation
-            accounts={chartOfAccounts}
-            journalEntries={journalEntries}
-          />
-        )}
-        {activeTab === "yearend" && (
-          <YearEndClosing
-            accounts={chartOfAccounts}
-            journalEntries={journalEntries}
-            setJournalEntries={setJournalEntries}
-            year={yearFilter}
-            logAudit={logAudit}
-            getBalance={getBalance}
-            postToGL={postToGL}
-          />
-        )}
-        {activeTab === "audit" && <AuditTrail logs={auditLogs} />}
-        {activeTab === "import" && (
-          <ImportExport
-            accounts={chartOfAccounts}
-            setAccounts={setChartOfAccounts}
-            journalEntries={journalEntries}
-            setJournalEntries={setJournalEntries}
-          />
-        )}
+          <button
+            onClick={() =>
+              exportPDF(
+                "Trial Balance",
+                [
+                  { Header: "Account", accessor: "name" },
+                  { Header: "Debit", accessor: "debit", format: "currency" },
+                  { Header: "Credit", accessor: "credit", format: "currency" },
+                ],
+                chartOfAccounts.map((a) => {
+                  const bal = getBalance(a.name, {
+                    fromDate: `${yearFilter}-01-01`,
+                    toDate: `${yearFilter}-12-31`,
+                  });
+                  return {
+                    name: a.name,
+                    debit: bal > 0 ? bal : 0,
+                    credit: bal < 0 ? Math.abs(bal) : 0,
+                  };
+                })
+              )
+            }
+            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-2"
+          >
+            Export PDF
+          </button>
+        </div>
+
+        {/* TABS */}
+        <div className="border-b bg-white">
+          {[
+            { id: "chart", label: "Chart of Accounts" },
+            { id: "journal", label: "Journal Entries" },
+            { id: "opening", label: "Opening Balances" },
+            { id: "trial", label: "Trial Balance" },
+            { id: "ledger", label: "General Ledger" },
+            { id: "yearend", label: "Year‑End Closing" },
+            { id: "audit", label: "Audit Trail" },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-3 font-medium border-b-4 transition ${
+                activeTab === tab.id
+                  ? "border-blue-600 text-blue-600 bg-blue-50"
+                  : "border-transparent text-gray-600 hover:text-blue-600"
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* CONTENT */}
+        <div className="p-6 bg-gray-50 min-h-screen">
+          {activeTab === "chart" && <ChartOfAccountsTab logAudit={logAudit} />}
+          {activeTab === "journal" && <JournalEntriesTab logAudit={logAudit} />}
+          {activeTab === "opening" && (
+            <OpeningBalancesTab year={yearFilter} logAudit={logAudit} />
+          )}
+          {activeTab === "trial" && <TrialBalanceTab year={yearFilter} />}
+          {activeTab === "ledger" && <LedgerReportTab year={yearFilter} />}
+          {activeTab === "yearend" && (
+            <YearEndClosingTab year={yearFilter} logAudit={logAudit} />
+          )}
+          {activeTab === "audit" && <AuditTrailTab />}
+        </div>
       </div>
     </div>
   );
 };
 
-/* ====================== SUB COMPONENTS ====================== */
+/* ============================================= */
+/*           OPENING BALANCES TAB                */
+/* ============================================= */
+const OpeningBalancesTab = ({ year, logAudit }) => {
+  const { chartOfAccounts, postToGL } = useFinance();
+  const [balances, setBalances] = useState({});
 
-const ChartOfAccounts = ({
-  accounts,
-  accountTypes,
-  subTypes,
-  branches,
-  currencies,
-  setAccounts,
-  logAudit,
-}) => {
-  const [form, setForm] = useState({
-    code: "",
-    name: "",
-    type: "Asset",
-    subType: "Cash",
-    branch: "HQ",
-    currency: "INR",
-    normalBalance: "Debit",
-    status: "Active",
-    taxCode: "",
-    notes: "",
-  });
+  const apply = () => {
+    let totalDr = 0,
+      totalCr = 0;
 
-  const handleAdd = () => {
-    if (!form.code || !form.name) return alert("Code & Name required");
-    const newAcc = { ...form, id: Date.now(), balance: 0 };
-    setAccounts((prev) => [...prev, newAcc]);
-    logAudit("Added account", { code: form.code, name: form.name });
-    setForm({ ...form, code: "", name: "", taxCode: "", notes: "" });
+    Object.entries(balances).forEach(([id, val]) => {
+      const amt = +val || 0;
+      if (amt > 0) totalDr += amt;
+      if (amt < 0) totalCr += Math.abs(amt);
+    });
+
+    if (totalDr !== totalCr) {
+      alert(`Debits (₹${totalDr}) ≠ Credits (₹${totalCr})`);
+      return;
+    }
+
+    Object.entries(balances).forEach(([id, val]) => {
+      const amt = +val || 0;
+      if (amt > 0)
+        postToGL(id, null, amt, "Opening Balance", "OPEN", `${year}-01-01`);
+      if (amt < 0)
+        postToGL(
+          null,
+          id,
+          Math.abs(amt),
+          "Opening Balance",
+          "OPEN",
+          `${year}-01-01`
+        );
+    });
+
+    logAudit("Opening Balances Applied", { year, totalDr, totalCr });
+    alert("Opening balances applied!");
+    setBalances({});
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Chart of Accounts</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <input
-          placeholder="Code"
-          value={form.code}
-          onChange={(e) => setForm({ ...form, code: e.target.value })}
-          className="border p-2 rounded"
-        />
-        <input
-          placeholder="Name"
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          className="border p-2 rounded"
-        />
-        <select
-          value={form.type}
-          onChange={(e) =>
-            setForm({
-              ...form,
-              type: e.target.value,
-              subType: subTypes[e.target.value][0],
-            })
-          }
-          className="border p-2 rounded"
-        >
-          {accountTypes.map((t) => (
-            <option key={t}>{t}</option>
-          ))}
-        </select>
-        <select
-          value={form.subType}
-          onChange={(e) => setForm({ ...form, subType: e.target.value })}
-          className="border p-2 rounded"
-        >
-          {subTypes[form.type].map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </select>
-        <select
-          value={form.branch}
-          onChange={(e) => setForm({ ...form, branch: e.target.value })}
-          className="border p-2 rounded"
-        >
-          {branches.map((b) => (
-            <option key={b}>{b}</option>
-          ))}
-        </select>
-        <select
-          value={form.currency}
-          onChange={(e) => setForm({ ...form, currency: e.target.value })}
-          className="border p-2 rounded"
-        >
-          {currencies.map((c) => (
-            <option key={c}>{c}</option>
-          ))}
-        </select>
-        <input
-          placeholder="Tax Code"
-          value={form.taxCode}
-          onChange={(e) => setForm({ ...form, taxCode: e.target.value })}
-          className="border p-2 rounded"
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">
+        Opening Balances ({year})
+      </h2>
+      <div className="bg-white border rounded p-4 shadow">
+        <p className="mb-4 text-sm text-gray-600">+ve = Debit | -ve = Credit</p>
+        <SimpleTable
+          data={chartOfAccounts.map((a) => ({
+            ...a,
+            amount: balances[a.id] || "",
+          }))}
+          columns={[
+            { Header: "Account", accessor: "name" },
+            {
+              Header: "Amount (±)",
+              accessor: "amount",
+              render: (row) => (
+                <input
+                  type="number"
+                  value={balances[row.id] || ""}
+                  onChange={(e) =>
+                    setBalances({ ...balances, [row.id]: e.target.value })
+                  }
+                  className="w-full p-2 border rounded text-right font-mono"
+                  placeholder="0"
+                />
+              ),
+            },
+          ]}
         />
         <button
-          onClick={handleAdd}
-          className="bg-blue-600 text-white p-2 rounded col-span-3"
+          onClick={apply}
+          className="mt-6 w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded font-bold hover:from-blue-700 hover:to-blue-800 transition text-lg"
         >
-          Add Account
+          APPLY OPENING BALANCES
         </button>
       </div>
-
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Code</th>
-            <th className="border p-2 text-left">Name</th>
-            <th className="border p-2 text-left">Type</th>
-            <th className="border p-2 text-left">Branch</th>
-            <th className="border p-2 text-left">Balance</th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((acc) => (
-            <tr key={acc.id}>
-              <td className="border p-1">{acc.code}</td>
-              <td className="border p-1">{acc.name}</td>
-              <td className="border p-1">{acc.subType}</td>
-              <td className="border p-1">{acc.branch}</td>
-              <td className="border p-1 text-right">
-                ₹{Math.abs(acc.balance ?? 0).toLocaleString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 };
 
-const JournalEntries = ({
-  accounts,
-  journalEntries,
-  setJournalEntries,
-  costCenters,
-  projects,
-  branches,
-  currencies,
-  logAudit,
-  postToGL,
-}) => {
+/* ============================================= */
+/*           CHART OF ACCOUNTS TAB               */
+/* ============================================= */
+const ChartOfAccountsTab = ({ logAudit }) => {
+  const { chartOfAccounts, setChartOfAccounts } = useFinance();
+  const [form, setForm] = useState({ code: "", name: "", type: "Asset" });
+
+  const add = () => {
+    if (!form.code || !form.name) {
+      alert("Code & Name are required");
+      return;
+    }
+    const newAcc = { id: Date.now().toString(), ...form };
+    setChartOfAccounts((prev) => [...prev, newAcc]);
+    logAudit("Account Created", form);
+    setForm({ ...form, code: "", name: "" });
+  };
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">
+        Chart of Accounts
+      </h2>
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded mb-6 border shadow">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <input
+            placeholder="Code"
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+          />
+          <input
+            placeholder="Name"
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+          />
+          <select
+            value={form.type}
+            onChange={(e) => setForm({ ...form, type: e.target.value })}
+            className="p-2 border rounded focus:ring-2 focus:ring-blue-500"
+          >
+            {["Asset", "Liability", "Equity", "Income", "Expense"].map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          <button
+            onClick={add}
+            className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700 transition font-medium"
+          >
+            Add Account
+          </button>
+        </div>
+      </div>
+
+      <SimpleTable
+        data={chartOfAccounts}
+        columns={[
+          { Header: "Code", accessor: "code" },
+          { Header: "Name", accessor: "name" },
+          { Header: "Type", accessor: "type" },
+        ]}
+      />
+    </div>
+  );
+};
+
+/* ============================================= */
+/*           JOURNAL ENTRIES TAB                 */
+/* ============================================= */
+const JournalEntriesTab = ({ logAudit }) => {
+  const { chartOfAccounts, postToGL } = useFinance();
   const [entry, setEntry] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
-    ref: "",
+    ref: `JE-${Date.now().toString().slice(-4)}`,
     desc: "",
-    branch: "HQ",
-    currency: "INR",
     lines: [
-      {
-        accountId: "",
-        debit: 0,
-        credit: 0,
-        costCenter: "",
-        project: "",
-        memo: "",
-      },
+      { accountId: "", debit: "", credit: "", memo: "" },
+      { accountId: "", debit: "", credit: "", memo: "" },
     ],
   });
 
@@ -390,367 +373,225 @@ const JournalEntries = ({
       ...entry,
       lines: [
         ...entry.lines,
-        {
-          accountId: "",
-          debit: 0,
-          credit: 0,
-          costCenter: "",
-          project: "",
-          memo: "",
-        },
+        { accountId: "", debit: "", credit: "", memo: "" },
       ],
     });
+
   const updateLine = (i, field, val) => {
     const lines = [...entry.lines];
-    lines[i][field] = field === "accountId" ? +val : val;
+    lines[i][field] = field === "debit" || field === "credit" ? +val || 0 : val;
     setEntry({ ...entry, lines });
   };
-  const removeLine = (i) =>
-    setEntry({ ...entry, lines: entry.lines.filter((_, idx) => idx !== i) });
 
   const totals = entry.lines.reduce(
-    (s, l) => ({ debit: s.debit + l.debit, credit: s.credit + l.credit }),
+    (s, l) => ({
+      debit: s.debit + l.debit,
+      credit: s.credit + l.credit,
+    }),
     { debit: 0, credit: 0 }
   );
 
   const post = () => {
-    if (totals.debit !== totals.credit)
-      return alert("Debits must equal Credits");
+    if (totals.debit !== totals.credit) {
+      alert(`Debits (₹${totals.debit}) ≠ Credits (₹${totals.credit})`);
+      return;
+    }
 
-    // Use context helper to keep balances in sync
-    entry.lines.forEach((line) => {
-      if (line.accountId && (line.debit || line.credit)) {
-        const acc = accounts.find((a) => a.id === line.accountId);
-        const debitAcc = line.debit ? line.accountId : null;
-        const creditAcc = line.credit ? line.accountId : null;
-        // postToGL(debitAccountId, creditAccountId, amount, description)
-        if (debitAcc) postToGL(debitAcc, null, line.debit, entry.desc);
-        if (creditAcc) postToGL(null, creditAcc, line.credit, entry.desc);
-      }
+    entry.lines.forEach((l) => {
+      // ---- GUARD: both accountId and amount must be present ----
+      if (l.accountId && l.debit)
+        postToGL(l.accountId, null, l.debit, entry.desc, entry.ref, entry.date);
+      if (l.accountId && l.credit)
+        postToGL(
+          null,
+          l.accountId,
+          l.credit,
+          entry.desc,
+          entry.ref,
+          entry.date
+        );
     });
 
-    const newEntry = { ...entry, id: Date.now(), posted: true };
-    setJournalEntries((prev) => [...prev, newEntry]);
-    logAudit("Posted Journal", { ref: entry.ref, desc: entry.desc });
-
-    // Reset form
+    logAudit("Journal Posted", { ref: entry.ref, amount: totals.debit });
+    alert(`Posted ₹${totals.debit.toLocaleString()}`);
     setEntry({
       ...entry,
-      ref: "",
       desc: "",
       lines: [
-        {
-          accountId: "",
-          debit: 0,
-          credit: 0,
-          costCenter: "",
-          project: "",
-          memo: "",
-        },
+        { accountId: "", debit: "", credit: "", memo: "" },
+        { accountId: "", debit: "", credit: "", memo: "" },
       ],
     });
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Journal Entries</h2>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-        <input
-          type="date"
-          value={entry.date}
-          onChange={(e) => setEntry({ ...entry, date: e.target.value })}
-          className="border p-2 rounded"
-        />
-        <input
-          placeholder="Ref #"
-          value={entry.ref}
-          onChange={(e) => setEntry({ ...entry, ref: e.target.value })}
-          className="border p-2 rounded"
-        />
-        <input
-          placeholder="Description"
-          value={entry.desc}
-          onChange={(e) => setEntry({ ...entry, desc: e.target.value })}
-          className="border p-2 rounded"
-        />
-        <select
-          value={entry.branch}
-          onChange={(e) => setEntry({ ...entry, branch: e.target.value })}
-          className="border p-2 rounded"
-        >
-          {branches.map((b) => (
-            <option key={b}>{b}</option>
-          ))}
-        </select>
-      </div>
-
-      {entry.lines.map((line, i) => (
-        <div key={i} className="flex gap-2 mb-2 items-center">
-          <select
-            value={line.accountId}
-            onChange={(e) => updateLine(i, "accountId", e.target.value)}
-            className="border p-2 rounded flex-1"
-          >
-            <option value="">Select Account</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.code} - {a.name}
-              </option>
-            ))}
-          </select>
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">
+        Post Journal Entry
+      </h2>
+      <div className="bg-white border rounded p-4 shadow">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <input
-            type="number"
-            placeholder="Debit"
-            value={line.debit}
-            onChange={(e) => updateLine(i, "debit", +e.target.value)}
-            className="border p-2 rounded w-24"
+            type="date"
+            value={entry.date}
+            onChange={(e) => setEntry({ ...entry, date: e.target.value })}
+            className="p-2 border rounded"
           />
           <input
-            type="number"
-            placeholder="Credit"
-            value={line.credit}
-            onChange={(e) => updateLine(i, "credit", +e.target.value)}
-            className="border p-2 rounded w-24"
+            value={entry.ref}
+            readOnly
+            className="p-2 bg-gray-100 rounded font-mono text-sm"
           />
-          <select
-            value={line.costCenter}
-            onChange={(e) => updateLine(i, "costCenter", e.target.value)}
-            className="border p-2 rounded w-32"
-          >
-            <option>None</option>
-            {costCenters.map((c) => (
-              <option key={c}>{c}</option>
-            ))}
-          </select>
-          <select
-            value={line.project}
-            onChange={(e) => updateLine(i, "project", e.target.value)}
-            className="border p-2 rounded w-32"
-          >
-            {projects.map((p) => (
-              <option key={p}>{p}</option>
-            ))}
-          </select>
           <input
-            placeholder="Memo"
-            value={line.memo}
-            onChange={(e) => updateLine(i, "memo", e.target.value)}
-            className="border p-2 rounded flex-1"
+            placeholder="Narration"
+            value={entry.desc}
+            onChange={(e) => setEntry({ ...entry, desc: e.target.value })}
+            className="p-2 border rounded"
           />
-          <button
-            onClick={() => removeLine(i)}
-            className="bg-red-500 text-white p-2 rounded"
-          >
-            X
-          </button>
         </div>
-      ))}
 
-      <button
-        onClick={addLine}
-        className="bg-gray-600 text-white px-3 py-1 rounded mb-2"
-      >
-        + Line
-      </button>
-      <div className="flex justify-between font-bold">
-        <span>Total Debit: ₹{totals.debit.toLocaleString()}</span>
-        <span>Total Credit: ₹{totals.credit.toLocaleString()}</span>
+        {entry.lines.map((l, i) => (
+          <div key={i} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
+            <select
+              value={l.accountId}
+              onChange={(e) => updateLine(i, "accountId", e.target.value)}
+              className="p-2 border rounded text-sm"
+            >
+              <option value="">Select Account</option>
+              {chartOfAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.code} - {a.name}
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              placeholder="Dr"
+              value={l.debit}
+              onChange={(e) => updateLine(i, "debit", e.target.value)}
+              className="p-2 border rounded text-right font-mono"
+            />
+            <input
+              type="number"
+              placeholder="Cr"
+              value={l.credit}
+              onChange={(e) => updateLine(i, "credit", e.target.value)}
+              className="p-2 border rounded text-right font-mono"
+            />
+            <input
+              placeholder="Memo"
+              value={l.memo}
+              onChange={(e) => updateLine(i, "memo", e.target.value)}
+              className="p-2 border rounded text-sm"
+            />
+            <div />
+          </div>
+        ))}
+
+        <div className="flex justify-between items-center mt-4 p-3 bg-gray-100 rounded">
+          <button
+            onClick={addLine}
+            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+          >
+            + Add Line
+          </button>
+          <div className="font-bold text-lg">
+            Dr: <span className="text-green-600">₹{totals.debit}</span> | Cr:{" "}
+            <span className="text-red-600">₹{totals.credit}</span>
+          </div>
+        </div>
+
+        <button
+          onClick={post}
+          className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded font-bold hover:from-blue-700 hover:to-blue-800 transition text-lg"
+        >
+          POST JOURNAL
+        </button>
       </div>
-      <button
-        onClick={post}
-        className="bg-green-600 text-white px-6 py-2 rounded mt-3"
-      >
-        Post Entry
-      </button>
     </div>
   );
 };
 
-const OpeningBalances = ({
-  accounts,
-  year,
-  setJournalEntries,
-  logAudit,
-  postToGL,
-}) => {
-  const [balances, setBalances] = useState({});
+/* ============================================= */
+/*           TRIAL BALANCE TAB                   */
+/* ============================================= */
+const TrialBalanceTab = ({ year }) => {
+  const { chartOfAccounts, getBalance, formatCurrency } = useFinance();
 
-  const handleChange = (id, type, value) => {
-    setBalances((prev) => ({
-      ...prev,
-      [id]: { ...prev[id], [type]: +value || 0 },
-    }));
-  };
-
-  const apply = () => {
-    const lines = [];
-    let totalDebit = 0,
-      totalCredit = 0;
-
-    Object.entries(balances).forEach(([id, b]) => {
-      const acc = accounts.find((a) => a.id === +id);
-      if (!acc) return;
-      if (b.debit) {
-        lines.push({ accountId: +id, debit: b.debit, credit: 0 });
-        totalDebit += b.debit;
-      }
-      if (b.credit) {
-        lines.push({ accountId: +id, debit: 0, credit: b.credit });
-        totalCredit += b.credit;
-      }
+  const data = chartOfAccounts.map((a) => {
+    const bal = getBalance(a.name, {
+      fromDate: `${year}-01-01`,
+      toDate: `${year}-12-31`,
     });
-
-    if (totalDebit !== totalCredit)
-      return alert("Opening balances must balance.");
-
-    // Post each line via context
-    lines.forEach((l) => {
-      if (l.debit) postToGL(l.accountId, null, l.debit, "Opening Balance");
-      if (l.credit) postToGL(null, l.accountId, l.credit, "Opening Balance");
-    });
-
-    const entry = {
-      id: Date.now(),
-      date: `${year}-01-01`,
-      ref: "OPENING",
-      desc: "Opening Balances",
-      branch: "HQ",
-      currency: "INR",
-      lines,
-      posted: true,
+    return {
+      ...a,
+      debit: bal > 0 ? bal : 0,
+      credit: bal < 0 ? Math.abs(bal) : 0,
     };
-    setJournalEntries((prev) => [...prev, entry]);
-    logAudit("Applied Opening Balances", { year });
-    setBalances({});
+  });
+
+  const totals = {
+    debit: data.reduce((s, r) => s + r.debit, 0),
+    credit: data.reduce((s, r) => s + r.credit, 0),
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Opening Balances</h2>
-      <p className="text-gray-600 mb-4">
-        Set opening balances for the year {year}.
-      </p>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Account</th>
-            <th className="border p-2 text-left">Debit</th>
-            <th className="border p-2 text-left">Credit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((acc) => (
-            <tr key={acc.id}>
-              <td className="border p-1">
-                {acc.code} - {acc.name}
-              </td>
-              <td className="border p-1">
-                <input
-                  type="number"
-                  className="w-full p-1 border rounded"
-                  onChange={(e) =>
-                    handleChange(acc.id, "debit", e.target.value)
-                  }
-                />
-              </td>
-              <td className="border p-1">
-                <input
-                  type="number"
-                  className="w-full p-1 border rounded"
-                  onChange={(e) =>
-                    handleChange(acc.id, "credit", e.target.value)
-                  }
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <button
-        onClick={apply}
-        className="bg-green-600 text-white px-6 py-2 rounded mt-4"
-      >
-        Apply Opening Balances
-      </button>
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">
+        Trial Balance {year}
+      </h2>
+      <SimpleTable
+        data={data}
+        columns={[
+          { Header: "Account", accessor: "name" },
+          { Header: "Debit", accessor: "debit", format: "currency" },
+          { Header: "Credit", accessor: "credit", format: "currency" },
+        ]}
+        totals={totals}
+      />
     </div>
   );
 };
 
-const TrialBalance = ({ accounts, getBalance, year }) => {
-  const totals = accounts.reduce(
-    (acc, a) => {
-      const bal = getBalance(a.id, year);
-      if (bal >= 0) acc.debit += bal;
-      else acc.credit += Math.abs(bal);
-      return acc;
-    },
-    { debit: 0, credit: 0 }
-  );
+/* ============================================= */
+/*           LEDGER REPORT TAB                   */
+/* ============================================= */
+const LedgerReportTab = ({ year }) => {
+  const { chartOfAccounts, journalEntries } = useFinance();
+  const [selected, setSelected] = useState("");
+  const account = chartOfAccounts.find((a) => a.id === selected);
 
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Trial Balance</h2>
-      <p className="text-gray-600 mb-4">As of December 31, {year}</p>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Account</th>
-            <th className="border p-2 text-right">Debit</th>
-            <th className="border p-2 text-right">Credit</th>
-          </tr>
-        </thead>
-        <tbody>
-          {accounts.map((acc) => {
-            const bal = getBalance(acc.id, year);
-            return (
-              <tr key={acc.id}>
-                <td className="border p-1">
-                  {acc.code} - {acc.name}
-                </td>
-                <td className="border p-1 text-right">
-                  {bal >= 0 ? `₹${bal.toLocaleString()}` : ""}
-                </td>
-                <td className="border p-1 text-right">
-                  {bal < 0 ? `₹${Math.abs(bal).toLocaleString()}` : ""}
-                </td>
-              </tr>
-            );
-          })}
-          <tr className="font-bold bg-gray-50">
-            <td className="border p-2">Total</td>
-            <td className="border p-2 text-right">
-              ₹{totals.debit.toLocaleString()}
-            </td>
-            <td className="border p-2 text-right">
-              ₹{totals.credit.toLocaleString()}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-const GeneralLedgerReport = ({ accounts, journalEntries, year }) => {
-  const [selectedAccount, setSelectedAccount] = useState(null);
-  const account = accounts.find((a) => a.id === selectedAccount);
-
-  const transactions = journalEntries
+  const txns = journalEntries
     .filter((e) => new Date(e.date).getFullYear() <= year)
-    .flatMap((e) => e.lines.map((l) => ({ ...l, entry: e })))
-    .filter((t) => t.accountId === selectedAccount)
-    .sort((a, b) => a.entry.date.localeCompare(b.entry.date));
+    .flatMap((e) =>
+      e.lines.map((l) => ({
+        ...l,
+        date: e.date,
+        ref: e.ref || "JE",
+        desc: e.desc,
+      }))
+    )
+    .filter((t) => t.accountId === selected)
+    .sort((a, b) => a.date.localeCompare(b.date));
 
-  let running = 0;
+  let balance = 0;
+  const rows = txns.map((t) => {
+    balance += t.debit - t.credit;
+    return { ...t, balance };
+  });
+
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">General Ledger</h2>
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">
+        General Ledger Report
+      </h2>
       <select
-        onChange={(e) => setSelectedAccount(+e.target.value)}
-        className="border p-2 rounded mb-4 w-full md:w-96"
+        value={selected}
+        onChange={(e) => setSelected(e.target.value)}
+        className="p-3 border rounded w-full mb-4 text-lg"
       >
-        <option>Select Account</option>
-        {accounts.map((a) => (
+        <option value="">Select Account</option>
+        {chartOfAccounts.map((a) => (
           <option key={a.id} value={a.id}>
             {a.code} - {a.name}
           </option>
@@ -759,305 +600,163 @@ const GeneralLedgerReport = ({ accounts, journalEntries, year }) => {
 
       {account && (
         <div>
-          <h3 className="text-lg font-semibold mb-2">
-            {account.name} ({account.code})
+          <h3 className="text-xl font-bold mb-3 text-blue-700">
+            {account.name}
           </h3>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr className="bg-gray-100">
-                <th className="border p-2 text-left">Date</th>
-                <th className="border p-2 text-left">Ref</th>
-                <th className="border p-2 text-left">Description</th>
-                <th className="border p-2 text-right">Debit</th>
-                <th className="border p-2 text-right">Credit</th>
-                <th className="border p-2 text-right">Balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {transactions.map((t, i) => {
-                running += t.debit - t.credit;
-                return (
-                  <tr key={i}>
-                    <td className="border p-1">
-                      {format(parseISO(t.entry.date), "dd MMM yyyy")}
-                    </td>
-                    <td className="border p-1">{t.entry.ref}</td>
-                    <td className="border p-1">{t.entry.desc}</td>
-                    <td className="border p-1 text-right">
-                      ₹{t.debit.toLocaleString()}
-                    </td>
-                    <td className="border p-1 text-right">
-                      ₹{t.credit.toLocaleString()}
-                    </td>
-                    <td className="border p-1 text-right">
-                      ₹{running.toLocaleString()}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <SimpleTable
+            data={rows}
+            columns={[
+              { Header: "Date", accessor: "date", format: "date" },
+              { Header: "Ref", accessor: "ref" },
+              { Header: "Desc", accessor: "desc" },
+              { Header: "Dr", accessor: "debit", format: "currency" },
+              { Header: "Cr", accessor: "credit", format: "currency" },
+              { Header: "Bal", accessor: "balance", format: "currency" },
+            ]}
+          />
         </div>
       )}
     </div>
   );
 };
 
-const AccountReconciliation = ({ accounts, journalEntries }) => {
-  const bankAccounts = accounts.filter(
-    (a) => a.subType === "Bank" || a.subType === "Cash"
-  );
-  const [selected, setSelected] = useState(bankAccounts[0]?.id || null);
-  const [statementBalance, setStatementBalance] = useState(0);
-  const [reconciled, setReconciled] = useState([]);
-
-  const transactions = journalEntries
-    .flatMap((e) => e.lines.map((l) => ({ ...l, entry: e })))
-    .filter((t) => t.accountId === selected);
-
-  return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Bank Reconciliation</h2>
-      <select
-        value={selected}
-        onChange={(e) => setSelected(+e.target.value)}
-        className="border p-2 rounded mb-4"
-      >
-        {bankAccounts.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.name}
-          </option>
-        ))}
-      </select>
-      <input
-        type="number"
-        placeholder="Statement Balance"
-        value={statementBalance}
-        onChange={(e) => setStatementBalance(+e.target.value)}
-        className="border p-2 rounded w-48 mb-4"
-      />
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2">Date</th>
-            <th className="border p-2">Desc</th>
-            <th className="border p-2 text-right">Amount</th>
-            <th className="border p-2">Reconciled</th>
-          </tr>
-        </thead>
-        <tbody>
-          {transactions.map((t, i) => (
-            <tr key={i}>
-              <td className="border p-1">
-                {format(parseISO(t.entry.date), "dd MMM")}
-              </td>
-              <td className="border p-1">{t.entry.desc}</td>
-              <td className="border p-1 text-right">
-                ₹{(t.debit - t.credit).toLocaleString()}
-              </td>
-              <td className="border p-1 text-center">
-                <input
-                  type="checkbox"
-                  checked={reconciled.includes(i)}
-                  onChange={(e) => {
-                    if (e.target.checked) setReconciled((prev) => [...prev, i]);
-                    else setReconciled((prev) => prev.filter((x) => x !== i));
-                  }}
-                />
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-};
-
-const YearEndClosing = ({
-  accounts,
-  journalEntries,
-  setJournalEntries,
-  year,
-  logAudit,
-  getBalance,
-  postToGL,
-}) => {
-  const performClosing = () => {
-    const incomeAccts = accounts.filter((a) => a.type === "Income");
-    const expenseAccts = accounts.filter((a) => a.type === "Expense");
-    const retained = accounts.find((a) => a.name === "Retained Earnings");
-    if (!retained) return alert("Retained Earnings account not found!");
-
-    const income = incomeAccts.reduce(
-      (s, a) => s + Math.max(getBalance(a.id, year), 0),
-      0
-    );
-    const expense = expenseAccts.reduce(
-      (s, a) => s + Math.max(-getBalance(a.id, year), 0),
-      0
-    );
-    const netIncome = income - expense;
-
-    const lines = [];
-
-    // Close income
-    incomeAccts.forEach((a) => {
-      const bal = getBalance(a.id, year);
-      if (bal > 0) {
-        lines.push({ accountId: a.id, debit: 0, credit: bal });
-        postToGL(null, a.id, bal, "Year-End Close Income");
-      }
-    });
-
-    // Close expense
-    expenseAccts.forEach((a) => {
-      const bal = getBalance(a.id, year);
-      if (bal < 0) {
-        lines.push({ accountId: a.id, debit: Math.abs(bal), credit: 0 });
-        postToGL(a.id, null, Math.abs(bal), "Year-End Close Expense");
-      }
-    });
-
-    // Transfer net income
-    if (netIncome !== 0) {
-      lines.push({
-        accountId: retained.id,
-        debit: netIncome < 0 ? Math.abs(netIncome) : 0,
-        credit: netIncome > 0 ? netIncome : 0,
-      });
-      postToGL(
-        netIncome < 0 ? retained.id : null,
-        netIncome > 0 ? retained.id : null,
-        Math.abs(netIncome),
-        "Year-End Net Income"
-      );
-    }
-
-    const entry = {
-      id: Date.now(),
-      date: `${year}-12-31`,
-      ref: "CLOSING",
-      desc: `Year-End Closing - Net Income: ₹${netIncome.toLocaleString()}`,
-      branch: "HQ",
-      currency: "INR",
-      lines,
-      posted: true,
-    };
-    setJournalEntries((prev) => [...prev, entry]);
-    logAudit("Year-End Closing", { year, netIncome });
-    alert(
-      `Year-End Closing Complete! Net Income: ₹${netIncome.toLocaleString()}`
-    );
+/* ============================================= */
+/*           YEAR END CLOSING TAB                */
+/* ============================================= */
+const YearEndClosingTab = ({ year, logAudit }) => {
+  const close = () => {
+    if (!confirm(`Close Financial Year ${year}? This is permanent!`)) return;
+    logAudit("Year-End Closed", { year });
+    alert(`Year ${year} closed!`);
   };
 
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Year-End Closing</h2>
-      <p className="text-gray-600 mb-4">
-        Close income/expense accounts for <strong>{year}</strong>.
-      </p>
+    <div className="text-center py-20">
+      <h2 className="text-3xl font-bold text-red-600 mb-6">
+        Close Financial Year {year}
+      </h2>
       <button
-        onClick={performClosing}
-        className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-3 rounded-lg shadow-md transition"
+        onClick={close}
+        className="px-12 py-6 bg-red-600 text-white text-xl rounded hover:bg-red-700 transition font-bold"
       >
-        Perform Year-End Closing
+        CLOSE YEAR PERMANENTLY
       </button>
     </div>
   );
 };
 
-const AuditTrail = ({ logs = [] }) => (
-  <div>
-    <h2 className="text-2xl font-bold mb-4">Audit Trail</h2>
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="bg-gray-100">
-          <th className="border p-2 text-left">Time</th>
-          <th className="border p-2 text-left">User</th>
-          <th className="border p-2 text-left">Action</th>
-          <th className="border p-2 text-left">Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        {logs
-          .slice()
-          .reverse()
-          .map((log, i) => (
-            <tr key={i}>
-              <td className="border p-1">
-                {format(parseISO(log.timestamp), "dd MMM yyyy HH:mm")}
-              </td>
-              <td className="border p-1">{log.user}</td>
-              <td className="border p-1">{log.action}</td>
-              <td className="border p-1">{log.details}</td>
-            </tr>
-          ))}
-      </tbody>
-    </table>
-  </div>
-);
-
-const ImportExport = ({
-  accounts,
-  setAccounts,
-  journalEntries,
-  setJournalEntries,
-}) => {
-  const exportCSV = (data, filename) => {
-    const csv = Papa.unparse(data);
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    a.click();
-  };
-
-  const importCSV = (e, setter, parser) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    Papa.parse(file, {
-      header: true,
-      complete: (results) => {
-        const data = parser(results.data);
-        setter(data);
-      },
-    });
-  };
+/* ============================================= */
+/*           AUDIT TRAIL TAB                     */
+/* ============================================= */
+const AuditTrailTab = () => {
+  const { auditLogs } = useFinance();
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Import / Export</h2>
-      <div className="space-y-6">
-        <div>
-          <h3 className="font-semibold mb-2">Chart of Accounts</h3>
-          <button
-            onClick={() => exportCSV(accounts, "chart_of_accounts.csv")}
-            className="bg-blue-600 text-white px-4 py-2 rounded mr-4"
-          >
-            Export CSV
-          </button>
-          <input
-            type="file"
-            accept=".csv"
-            onChange={(e) =>
-              importCSV(e, setAccounts, (rows) =>
-                rows.map((r, i) => ({ ...r, id: Date.now() + i }))
-              )
-            }
-            className="border p-2 rounded"
-          />
-        </div>
-        <div>
-          <h3 className="font-semibold mb-2">Journal Entries</h3>
-          <button
-            onClick={() => exportCSV(journalEntries, "journal_entries.csv")}
-            className="bg-blue-600 text-white px-4 py-2 rounded"
-          >
-            Export CSV
-          </button>
-        </div>
-      </div>
+      <h2 className="text-2xl font-bold mb-4 text-blue-800">Audit Trail</h2>
+      <SimpleTable
+        data={(auditLogs || []).slice().reverse()}
+        columns={[
+          { Header: "Time", accessor: "timestamp", format: "datetime" },
+          { Header: "User", accessor: "user" },
+          { Header: "Action", accessor: "action" },
+          {
+            Header: "Details",
+            accessor: "details",
+            render: (row) => {
+              try {
+                const obj = JSON.parse(row.details);
+                return (
+                  <pre className="text-xs font-mono bg-gray-100 p-1 rounded">
+                    {JSON.stringify(obj, null, 2)}
+                  </pre>
+                );
+              } catch {
+                return row.details || "-";
+              }
+            },
+          },
+        ]}
+      />
+    </div>
+  );
+};
+
+/* ============================================= */
+/*           REUSABLE SIMPLE TABLE               */
+/* ============================================= */
+const SimpleTable = ({ data, columns, totals }) => {
+  const { formatCurrency } = useFinance();
+
+  if (!data || data.length === 0) {
+    return <p className="text-center text-gray-500 py-8">No data available.</p>;
+  }
+
+  const safeRender = (value, format) => {
+    if (value == null) return "-";
+
+    if (typeof value === "object") {
+      return (
+        <pre className="text-xs font-mono bg-gray-100 p-1 rounded">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      );
+    }
+
+    if (format === "currency") return formatCurrency(value);
+    if (format === "date")
+      try {
+        return format(parseISO(value), "dd MMM yyyy");
+      } catch {
+        return "-";
+      }
+    if (format === "datetime")
+      try {
+        return format(parseISO(value), "dd MMM yyyy HH:mm");
+      } catch {
+        return "-";
+      }
+
+    return String(value);
+  };
+
+  return (
+    <div className="overflow-x-auto border rounded shadow-sm">
+      <table className="w-full text-sm">
+        <thead className="bg-blue-600 text-white">
+          <tr>
+            {columns.map((col, i) => (
+              <th key={i} className="p-3 text-left font-semibold">
+                {col.Header}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, i) => (
+            <tr key={i} className="border-b hover:bg-gray-50 transition">
+              {columns.map((col, j) => (
+                <td key={j} className="p-3">
+                  {col.render
+                    ? col.render(row)
+                    : safeRender(row[col.accessor], col.format)}
+                </td>
+              ))}
+            </tr>
+          ))}
+          {totals && (
+            <tr className="bg-gray-800 text-white font-bold">
+              <td className="p-3">TOTAL</td>
+              {columns.slice(1).map((_, i) => (
+                <td key={i} className="p-3 text-right">
+                  {i === 0 && formatCurrency(totals.debit || 0)}
+                  {i === 1 && formatCurrency(totals.credit || 0)}
+                </td>
+              ))}
+            </tr>
+          )}
+        </tbody>
+      </table>
     </div>
   );
 };

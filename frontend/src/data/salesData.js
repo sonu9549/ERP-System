@@ -306,3 +306,13 @@ export const generateMockStockLedger = () => {
 
   return ledger;
 };
+export const sampleSalesData = {
+  customers: [
+    { id: 1, name: "ABC Corp", email: "abc@corp.com", phone: "9876543210" },
+    { id: 2, name: "XYZ Ltd", email: "xyz@ltd.com", phone: "9123456789" },
+  ],
+  products: [
+    { id: 1, name: "Steel Rod 12mm", price: 450, unit: "kg" },
+    { id: 2, name: "Welding Electrode", price: 80, unit: "pack" },
+  ],
+};

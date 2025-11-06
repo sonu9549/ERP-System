@@ -1,0 +1,163 @@
+// src/config/moduleAccessConfig.js
+import { ROLES } from "../constants/roles";
+
+// Central Access Control: Client yahan se control karega
+export const MODULE_ACCESS = {
+  // Dashboard sabko dikhega
+  "/": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.MANAGER, ROLES.USER],
+
+  // INVENTORY
+  "/inventory/dashboard": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/stock": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/st": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/purchase_manage": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/warehouse": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/products": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/suppliers": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+  "/inventory/reports": [ROLES.SUPER_ADMIN, ROLES.INVENTORY_MANAGER],
+
+  // SALES
+
+  "/sales/cm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SALES_MANAGER],
+  "/sales/orders": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.SALES_MANAGER,
+    ROLES.SALES_REP,
+  ],
+  "/sales/shipping": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SALES_MANAGER],
+  "/sales/invoice": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SALES_MANAGER],
+  "/sales/analytics": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SALES_MANAGER],
+  "/sales/returns": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.SALES_REP],
+
+  // CRM
+  "/crm/cm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.CRM_MANAGER],
+  "/crm/leads": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.CRM_MANAGER,
+    ROLES.SALES_REP,
+  ],
+  "/crm/customer-support": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.CRM_MANAGER],
+  "/crm/followups": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.CRM_MANAGER,
+    ROLES.SALES_REP,
+  ],
+  "/crm/loyalty": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.CRM_MANAGER],
+  "/crm/crm-analytics": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.CRM_MANAGER],
+
+  // HR
+  "/hr/employees": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.HR_MANAGER],
+  "/hr/recruitment": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.HR_MANAGER],
+  "/hr/attendance": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.HR_MANAGER,
+    ROLES.MANAGER,
+  ],
+  "/hr/payroll": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.HR_MANAGER],
+  "/hr/performance": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.HR_MANAGER,
+    ROLES.MANAGER,
+  ],
+
+  // FINANCE
+  "/finance/ledger": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/ap": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/ar": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/fam": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/bf": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/co": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/fscm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/taxcomp": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+  "/finance/reports": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.FINANCE_MANAGER],
+
+  // QUALITY
+
+  "/quality/iqc": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+  "/quality/ipqc": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+  "/quality/fqc": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+  "/quality/qip": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+  "/quality/ncm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+  "/quality/qc": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.QUALITY_MANAGER],
+
+  // LOGISTICS
+
+  "/logistics/warehouse": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.LOGISTICS_MANAGER,
+  ],
+  "/logistics/transport": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.LOGISTICS_MANAGER,
+  ],
+  "/logistics/cross-docking": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.LOGISTICS_MANAGER,
+  ],
+  "/logistics/packaghandling": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.LOGISTICS_MANAGER,
+  ],
+
+  // PRODUCTION
+
+  "/production/mm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/bom": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/pp": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/mct": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/wm": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/po": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+  "/production/cv": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PRODUCTION_MANAGER],
+
+  // PROCUREMENT
+
+  "/procurement/purchase-requisition": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/rq": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/po": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/grn": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/pr": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/vrec": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+  "/procurement/pa": [
+    ROLES.SUPER_ADMIN,
+    ROLES.ADMIN,
+    ROLES.PROCUREMENT_MANAGER,
+  ],
+
+  // OTHERS
+  "/multibranch": [ROLES.SUPER_ADMIN],
+  "/plant": [ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.PLANT_MANAGER],
+  "/settings": [ROLES.SUPER_ADMIN, ROLES.ADMIN],
+};

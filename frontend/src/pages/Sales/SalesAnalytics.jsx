@@ -21,7 +21,7 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 
 const formatRevenue = (value) => {
   if (!value) return "$0";
@@ -33,7 +33,7 @@ const formatRevenue = (value) => {
 };
 
 export default function SalesAnalytics() {
-  const { orders } = useOrderShipping();
+  const { orders } = useSales();
 
   // === 1. Key Metrics ===
   const metrics = useMemo(() => {

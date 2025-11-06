@@ -1,5 +1,5 @@
 // src/pages/purchase/PurchaseManagement.jsx
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import {
   FileText,
   Package,
@@ -15,7 +15,7 @@ import { format } from "date-fns";
 
 export default function PurchaseManagement() {
   const { products, warehouses, bins, stockLedger, addStockTransaction } =
-    useOrderShipping();
+    useSales();
   const [activeTab, setActiveTab] = useState("orders");
 
   // === Purchase Orders State ===

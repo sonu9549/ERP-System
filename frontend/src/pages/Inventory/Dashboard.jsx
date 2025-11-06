@@ -23,7 +23,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import { format } from "date-fns";
 
 const formatCurrency = (value) => {
@@ -40,7 +40,7 @@ export default function InventoryDashboard() {
     stockLedger = [],
     products = [],
     warehouses = [],
-  } = useOrderShipping();
+  } = useSales();
 
   // === KPIs ===
   const stats = useMemo(() => {

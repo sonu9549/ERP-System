@@ -12,7 +12,7 @@ import {
   AlertCircle,
   Truck,
 } from "lucide-react";
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 
 const formatRevenue = (value) => {
   if (!value) return "$0";
@@ -125,7 +125,7 @@ const generateOrders = () => [
 ];
 
 export default function SalesOrder() {
-  const { orders, setOrders, createShipmentFromOrder } = useOrderShipping();
+  const { orders, setOrders, createShipmentFromOrder } = useSales();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");

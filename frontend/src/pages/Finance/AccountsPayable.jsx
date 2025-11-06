@@ -1,4 +1,19 @@
 // src/components/AccountsPayable.jsx
+// =============================================================================
+// Accounts Payable Component - Full-Cycle AP Management
+// Features:
+// - Dashboard with totals, overdue, due soon, aging buckets
+// - Vendor management (CRUD + quick invoice)
+// - Invoice management (CRUD, approval, PDF upload)
+// - Payment recording with batch selection
+// - Reconciliation with bank transactions
+// - CSV exports
+// - Search & filter
+// - Safe date handling (no crashes on invalid/missing dates)
+// - Responsive Tailwind UI with Lucide icons
+// - Integrates with FinanceContext for global state
+// =============================================================================
+
 import React, { useState, useRef, useMemo, useCallback } from "react";
 import { format, addDays, parseISO } from "date-fns";
 import {
@@ -23,6 +38,9 @@ import {
 } from "lucide-react";
 import { useFinance } from "../../context/FinanceContext";
 
+// =============================================================================
+// Utility: Export any array of objects to CSV file
+// =============================================================================
 const exportToCSV = (data, filename) => {
   if (!data.length) return;
   const headers = Object.keys(data[0]).join(",");
@@ -37,10 +55,20 @@ const exportToCSV = (data, filename) => {
   window.URL.revokeObjectURL(url);
 };
 
+// =============================================================================
+// Utility: Determine aging bucket for invoice due date
+// - Safely handles missing/invalid dates → returns "current"
+// =============================================================================
 const getAgingBucket = (dueDate) => {
-  const due = new Date(dueDate);
+  if (!dueDate) return "current";
+  let due;
+  try {
+    due = parseISO(dueDate);
+  } catch {
+    return "current";
+  }
   const today = new Date();
-  const diff = Math.floor((today - due) / 86400000);
+  const diff = Math.floor((today - due) / 86400000); // days past due
   if (diff <= 0) return "current";
   if (diff <= 30) return "1-30";
   if (diff <= 60) return "31-60";
@@ -48,6 +76,9 @@ const getAgingBucket = (dueDate) => {
   return "90+";
 };
 
+// =============================================================================
+// Reusable Component: Status badge (open/partial/paid)
+// =============================================================================
 const StatusBadge = ({ status }) => {
   const map = {
     open: { bg: "bg-blue-100", text: "text-blue-700", Icon: Clock },
@@ -69,7 +100,13 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// =============================================================================
+// Main Component: AccountsPayable
+// =============================================================================
 export default function AccountsPayable() {
+  // -------------------------------------------------------------------------
+  // Global State from FinanceContext
+  // -------------------------------------------------------------------------
   const {
     vendors,
     setVendors,
@@ -85,8 +122,11 @@ export default function AccountsPayable() {
     expenseAccount,
   } = useFinance();
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  // -------------------------------------------------------------------------
+  // Local UI State
+  // -------------------------------------------------------------------------
+  const [searchTerm, setSearchTerm] = useState(""); // Invoice search
+  const [statusFilter, setStatusFilter] = useState("all"); // Invoice status filter
   const [selectedTab, setSelectedTab] = useState("dashboard");
   const [showVendorModal, setShowVendorModal] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
@@ -94,20 +134,44 @@ export default function AccountsPayable() {
   const [editingInvoice, setEditingInvoice] = useState(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showReconcileModal, setShowReconcileModal] = useState(false);
-  const [selectedInvoices, setSelectedInvoices] = useState([]);
-  const [uploadedFile, setUploadedFile] = useState(null);
+  const [selectedInvoices, setSelectedInvoices] = useState([]); // For payment tab
+  const [uploadedFile, setUploadedFile] = useState(null); // PDF preview
   const fileInputRef = useRef(null);
 
+  // -------------------------------------------------------------------------
+  // Memoized: Dashboard summary totals
+  // - Calculates AP totals, overdue, due soon, reconciliation stats
+  // - Safe date parsing with try/catch
+  // -------------------------------------------------------------------------
   const totals = useMemo(() => {
     const open = invoices.filter((i) => ["open", "partial"].includes(i.status));
+
+    // Due soon: open invoices due within 7 days
     const dueSoon = invoices.filter((i) => {
-      const days = Math.ceil((new Date(i.dueDate) - Date.now()) / 86400000);
+      if (!i.dueDate) return false;
+      let due;
+      try {
+        due = parseISO(i.dueDate);
+      } catch {
+        return false;
+      }
+      const days = Math.ceil((due - Date.now()) / 86400000);
       return i.status === "open" && days <= 7 && days > 0;
     });
+
+    // Overdue: past due with balance > 0
     const overdue = invoices.filter((i) => {
-      const days = Math.floor((Date.now() - new Date(i.dueDate)) / 86400000);
+      if (!i.dueDate) return false;
+      let due;
+      try {
+        due = parseISO(i.dueDate);
+      } catch {
+        return false;
+      }
+      const days = Math.floor((Date.now() - due) / 86400000);
       return days > 0 && i.balance > 0;
     });
+
     return {
       totalAP: invoices.reduce((s, i) => s + i.balance, 0),
       openAmount: open.reduce((s, i) => s + i.balance, 0),
@@ -118,6 +182,9 @@ export default function AccountsPayable() {
     };
   }, [invoices, payments]);
 
+  // -------------------------------------------------------------------------
+  // Memoized: Filtered invoices for search + status
+  // -------------------------------------------------------------------------
   const filteredInvoices = useMemo(() => {
     let list = [...invoices];
     if (searchTerm) {
@@ -130,16 +197,20 @@ export default function AccountsPayable() {
         );
       });
     }
-    if (statusFilter !== "all")
+    if (statusFilter !== "all") {
       list = list.filter((i) => i.status === statusFilter);
+    }
     return list;
   }, [invoices, vendors, searchTerm, statusFilter]);
 
+  // -------------------------------------------------------------------------
+  // Callbacks: Export to CSV
+  // -------------------------------------------------------------------------
   const handleExportInvoices = useCallback(() => {
     const data = filteredInvoices.map((i) => ({
       "Invoice #": i.invoiceNo,
       Vendor: vendors.find((v) => v.id === i.vendorId)?.name || "",
-      "Due Date": i.dueDate,
+      "Due Date": i.dueDate || "-",
       Total: i.total,
       Balance: i.balance,
       Status: i.status,
@@ -150,7 +221,7 @@ export default function AccountsPayable() {
 
   const handleExportPayments = useCallback(() => {
     const data = payments.map((p) => ({
-      Date: p.date,
+      Date: p.date || "-",
       Vendor: vendors.find((v) => v.id === p.vendorId)?.name || "",
       Amount: p.amount,
       Method: p.method,
@@ -159,7 +230,13 @@ export default function AccountsPayable() {
     exportToCSV(data, "ap_payments");
   }, [payments, vendors]);
 
-  // ==================== MODALS ====================
+  // =============================================================================
+  // MODALS
+  // =============================================================================
+
+  // -------------------------------------------------------------------------
+  // Vendor Modal: Add or Edit Vendor
+  // -------------------------------------------------------------------------
   const VendorModal = () => {
     const [form, setForm] = useState(
       editingVendor || {
@@ -173,6 +250,7 @@ export default function AccountsPayable() {
         category: "",
       }
     );
+
     const save = () => {
       if (!form.name || !form.code) return;
       if (editingVendor) {
@@ -185,6 +263,7 @@ export default function AccountsPayable() {
       setShowVendorModal(false);
       setEditingVendor(null);
     };
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4">
@@ -267,6 +346,12 @@ export default function AccountsPayable() {
     );
   };
 
+  // -------------------------------------------------------------------------
+  // Invoice Modal: Create or Edit Invoice
+  // - Calculates due date based on vendor terms
+  // - Supports PDF upload
+  // - Posts to GL on create
+  // -------------------------------------------------------------------------
   const InvoiceModal = () => {
     const [form, setForm] = useState(
       editingInvoice || {
@@ -278,6 +363,7 @@ export default function AccountsPayable() {
         file: null,
       }
     );
+
     const handleFile = (e) => {
       const file = e.target.files[0];
       if (file?.type === "application/pdf") {
@@ -285,6 +371,7 @@ export default function AccountsPayable() {
         setUploadedFile(file);
       }
     };
+
     const save = () => {
       if (!form.vendorId || !form.invoiceNo || !form.total) return;
       const vendor = vendors.find((v) => v.id === form.vendorId);
@@ -321,6 +408,7 @@ export default function AccountsPayable() {
       setShowInvoiceModal(false);
       setEditingInvoice(null);
     };
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl max-w-2xl w-full p-6 space-y-4">
@@ -409,6 +497,9 @@ export default function AccountsPayable() {
     );
   };
 
+  // -------------------------------------------------------------------------
+  // Payment Modal: Record payment for selected invoices
+  // -------------------------------------------------------------------------
   const PaymentModal = () => {
     const payable = invoices.filter(
       (i) => selectedInvoices.includes(i.id) && i.balance > 0
@@ -416,6 +507,7 @@ export default function AccountsPayable() {
     const total = payable.reduce((s, i) => s + i.balance, 0);
     const [amount, setAmount] = useState(total);
     const [method, setMethod] = useState("ACH");
+
     const record = () => {
       const payment = {
         id: `p${Date.now()}`,
@@ -445,6 +537,7 @@ export default function AccountsPayable() {
       setShowPaymentModal(false);
       setSelectedInvoices([]);
     };
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl max-w-lg w-full p-6 space-y-4">
@@ -489,6 +582,9 @@ export default function AccountsPayable() {
     );
   };
 
+  // -------------------------------------------------------------------------
+  // Reconcile Modal: Match bank transactions with payments
+  // -------------------------------------------------------------------------
   const ReconcileModal = () => {
     const match = (bankId, payId) => {
       setPayments((prev) =>
@@ -498,13 +594,14 @@ export default function AccountsPayable() {
         prev.map((t) => (t.id === bankId ? { ...t, matched: true } : t))
       );
     };
+
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-xl max-w-4xl w-full p-6 max-h-screen overflow-y-auto">
           <h3 className="text-xl font-semibold mb-4">Reconciliation</h3>
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <h4 className="font-medium mb-2">Bank</h4>
+              <h4 className="font-medium mb-2">Bank Transactions</h4>
               {bankTransactions.map((t) => (
                 <div
                   key={t.id}
@@ -533,7 +630,7 @@ export default function AccountsPayable() {
                     </p>
                     <p className="font-medium">${p.amount.toFixed(2)}</p>
                     <button
-                      onClick={() => match("b2", p.id)}
+                      onClick={() => match("b2", p.id)} // Example bank ID
                       className="text-xs text-indigo-600"
                     >
                       Match
@@ -553,9 +650,16 @@ export default function AccountsPayable() {
     );
   };
 
-  // ==================== TABS ====================
+  // =============================================================================
+  // TABS
+  // =============================================================================
+
+  // -------------------------------------------------------------------------
+  // Dashboard Tab: Summary cards + aging report
+  // -------------------------------------------------------------------------
   const DashboardTab = () => (
     <div className="space-y-6">
+      {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
         {[
           { label: "Total AP", value: totals.totalAP, color: "indigo" },
@@ -582,16 +686,15 @@ export default function AccountsPayable() {
           </div>
         ))}
       </div>
+
+      {/* Aging Buckets */}
       <div className="bg-white rounded-xl shadow-sm p-5">
-        <h3 className="text-lg font-semibold mb-4">Aging</h3>
+        <h3 className="text-lg font-semibold mb-4">Aging Summary</h3>
         <div className="grid grid-cols-5 gap-4 text-center">
           {["Current", "1-30", "31-60", "61-90", "90+"].map((b) => {
+            const bucketKey = b.toLowerCase().replace(/[^0-9a-z]/g, "");
             const amt = invoices
-              .filter(
-                (i) =>
-                  getAgingBucket(i.dueDate) ===
-                  b.toLowerCase().replace(/[^0-9a-z]/g, "")
-              )
+              .filter((i) => getAgingBucket(i.dueDate) === bucketKey)
               .reduce((s, i) => s + i.balance, 0);
             return (
               <div key={b} className="bg-gray-50 p-3 rounded-lg">
@@ -602,6 +705,8 @@ export default function AccountsPayable() {
           })}
         </div>
       </div>
+
+      {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => {
@@ -616,7 +721,7 @@ export default function AccountsPayable() {
           onClick={handleExportInvoices}
           className="flex items-center gap-2 bg-gray-600 text-white px-4 py-2 rounded-lg"
         >
-          <FileDown className="w-4 h-4" /> Export
+          <FileDown className="w-4 h-4" /> Export Invoices
         </button>
         <button
           onClick={() => setShowReconcileModal(true)}
@@ -628,11 +733,16 @@ export default function AccountsPayable() {
     </div>
   );
 
+  // -------------------------------------------------------------------------
+  // Vendors Tab: List with quick actions
+  // -------------------------------------------------------------------------
   const VendorsTab = () => {
     const del = (id) => {
-      if (confirm("Delete vendor?"))
+      if (confirm("Delete vendor? This will not delete associated invoices.")) {
         setVendors((prev) => prev.filter((v) => v.id !== id));
+      }
     };
+
     const quickInv = (v) => {
       const due = addDays(new Date(), v.paymentTerms);
       setEditingInvoice({
@@ -643,7 +753,7 @@ export default function AccountsPayable() {
         )}`,
         poNo: "",
         issueDate: format(new Date(), "yyyy-MM-dd"),
-        dueDate: format(due, "yyyy-MM-dd"),
+        dueDate: format(due, "dd MM yyyy"),
         total: 0,
         balance: 0,
         status: "open",
@@ -652,9 +762,10 @@ export default function AccountsPayable() {
       });
       setShowInvoiceModal(true);
     };
+
     return (
       <div className="space-y-4">
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">Vendors ({vendors.length})</h2>
           <button
             onClick={() => {
@@ -663,7 +774,7 @@ export default function AccountsPayable() {
             }}
             className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg"
           >
-            <Plus className="w-4 h-4" /> Add
+            <Plus className="w-4 h-4" /> Add Vendor
           </button>
         </div>
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
@@ -691,17 +802,19 @@ export default function AccountsPayable() {
               {vendors.map((v) => (
                 <tr key={v.id}>
                   <td className="px-6 py-4 text-sm">{v.code}</td>
-                  <td className="px-6 py-4 text-sm">{v.name}</td>
+                  <td className="px-6 py-4 text-sm font-medium">{v.name}</td>
                   <td className="px-6 py-4 text-sm text-gray-500">
                     {v.email}
                     <br />
                     {v.phone}
                   </td>
-                  <td className="px-6 py-4 text-sm">Net {v.paymentTerms}</td>
                   <td className="px-6 py-4 text-sm">
+                    Net {v.paymentTerms} days
+                  </td>
+                  <td className="px-6 py-4 text-sm space-x-2">
                     <button
                       onClick={() => quickInv(v)}
-                      className="text-blue-600 hover:underline mr-3 text-xs"
+                      className="text-blue-600 hover:underline text-xs"
                     >
                       Quick Invoice
                     </button>
@@ -710,7 +823,7 @@ export default function AccountsPayable() {
                         setEditingVendor(v);
                         setShowVendorModal(true);
                       }}
-                      className="text-indigo-600 mr-2"
+                      className="text-indigo-600"
                     >
                       <Edit className="w-4 h-4 inline" />
                     </button>
@@ -727,43 +840,57 @@ export default function AccountsPayable() {
     );
   };
 
+  // -------------------------------------------------------------------------
+  // Invoices Tab: Full invoice list with selection & actions
+  // - Safe date formatting (shows "-" if invalid)
+  // -------------------------------------------------------------------------
   const InvoicesTab = () => {
     const [localSel, setLocalSel] = useState([]);
     const payable = filteredInvoices.filter(
       (i) => i.balance > 0 && i.approval === "approved"
     );
+
     const selAll = (e) =>
       setLocalSel(e.target.checked ? payable.map((i) => i.id) : []);
+
     const selOne = (id) =>
       setLocalSel((prev) =>
         prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
       );
+
     const selTotal = filteredInvoices
       .filter((i) => localSel.includes(i.id))
       .reduce((s, i) => s + i.balance, 0);
+
     const proceed = () => {
       setSelectedInvoices(localSel);
       setSelectedTab("payments");
     };
+
     const edit = (inv) => {
       setEditingInvoice(inv);
       setShowInvoiceModal(true);
     };
+
     const del = (id) => {
-      if (confirm("Delete?"))
+      if (confirm("Delete invoice?")) {
         setInvoices((prev) => prev.filter((i) => i.id !== id));
+      }
     };
+
     const approve = (id) =>
       setInvoices((prev) =>
         prev.map((i) => (i.id === id ? { ...i, approval: "approved" } : i))
       );
+
     const reject = (id) =>
       setInvoices((prev) =>
         prev.map((i) => (i.id === id ? { ...i, approval: "rejected" } : i))
       );
+
     return (
       <div className="space-y-4">
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">
             Invoices ({filteredInvoices.length})
           </h2>
@@ -781,33 +908,37 @@ export default function AccountsPayable() {
               }}
               className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg"
             >
-              <Plus className="w-4 h-4" /> New
+              <Plus className="w-4 h-4" /> New Invoice
             </button>
           </div>
         </div>
+
+        {/* Selection Summary */}
         {localSel.length > 0 && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex justify-between items-center">
             <span className="text-sm font-medium text-blue-900">
-              {localSel.length} selected
+              {localSel.length} invoice{localSel.length > 1 ? "s" : ""} selected
             </span>
             <div className="flex items-center gap-3">
               <span className="text-lg font-semibold text-blue-700">
-                ${selTotal.toFixed(2)}
+                ${(selTotal ?? 0).toFixed(2)}
               </span>
               <button
                 onClick={proceed}
                 className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm"
               >
-                Pay
+                Proceed to Pay
               </button>
             </div>
           </div>
         )}
+
+        {/* Invoice Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3">
+                <th className="px-6 py-3 w-12">
                   <input
                     type="checkbox"
                     onChange={selAll}
@@ -824,7 +955,7 @@ export default function AccountsPayable() {
                   Vendor
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Due
+                  Due Date
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   Balance
@@ -838,15 +969,19 @@ export default function AccountsPayable() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
                   File
                 </th>
-                <th className="px-6 py-3"></th>
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredInvoices.map((inv) => {
                 const v = vendors.find((x) => x.id === inv.vendorId);
                 const payOk = inv.balance > 0 && inv.approval === "approved";
+                const dueDate = inv.dueDate ? parseISO(inv.dueDate) : null;
+
                 return (
-                  <tr key={inv.id}>
+                  <tr key={inv.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <input
                         type="checkbox"
@@ -859,12 +994,12 @@ export default function AccountsPayable() {
                     <td className="px-6 py-4 text-sm font-medium text-indigo-600">
                       {inv.invoiceNo}
                     </td>
-                    <td className="px-6 py-4 text-sm">{v?.name}</td>
+                    <td className="px-6 py-4 text-sm">{v?.name || "-"}</td>
                     <td className="px-6 py-4 text-sm text-gray-500">
-                      {format(parseISO(inv.dueDate), "MMM d, yyyy")}
+                      {dueDate ? format(dueDate, "dd-MM-yyyy") : "N/A"}
                     </td>
                     <td className="px-6 py-4 text-sm font-medium">
-                      ${inv.balance.toFixed(2)}
+                      ${(inv.balance ?? 0).toFixed(2)}
                     </td>
                     <td className="px-6 py-4">
                       <StatusBadge status={inv.status} />
@@ -879,7 +1014,8 @@ export default function AccountsPayable() {
                             : "bg-yellow-100 text-yellow-700"
                         }`}
                       >
-                        {inv.approval}
+                        {(inv.approval ?? "").charAt(0).toUpperCase() +
+                          (inv.approval ?? "").slice(1)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm">
@@ -887,18 +1023,19 @@ export default function AccountsPayable() {
                         <a
                           href={inv.file}
                           target="_blank"
+                          rel="noopener noreferrer"
                           className="text-indigo-600 hover:underline"
                         >
-                          View
+                          View PDF
                         </a>
                       ) : (
                         "-"
                       )}
                     </td>
-                    <td className="px-6 py-4 text-right text-sm">
+                    <td className="px-6 py-4 text-right text-sm space-x-2">
                       <button
                         onClick={() => edit(inv)}
-                        className="text-indigo-600 mr-2"
+                        className="text-indigo-600"
                       >
                         <Edit className="w-4 h-4 inline" />
                       </button>
@@ -935,14 +1072,18 @@ export default function AccountsPayable() {
     );
   };
 
+  // -------------------------------------------------------------------------
+  // Payments Tab: View payments + batch pay selected invoices
+  // -------------------------------------------------------------------------
   const PaymentsTab = () => {
     const payable = invoices.filter(
       (i) => selectedInvoices.includes(i.id) && i.balance > 0
     );
     const totalPay = payable.reduce((s, i) => s + i.balance, 0);
+
     return (
       <div className="space-y-4">
-        <div className="flex justify-between">
+        <div className="flex justify-between items-center">
           <h2 className="text-2xl font-bold">Payments ({payments.length})</h2>
           <button
             onClick={handleExportPayments}
@@ -951,13 +1092,18 @@ export default function AccountsPayable() {
             <Download className="w-4 h-4" /> Export
           </button>
         </div>
+
+        {/* Ready to Pay Section */}
         {payable.length > 0 && (
           <div className="bg-green-50 border border-green-200 rounded-lg p-4">
             <h3 className="font-medium text-green-900 mb-2">Ready to Pay</h3>
             <div className="space-y-1 text-sm">
               {payable.map((inv) => (
                 <div key={inv.id} className="flex justify-between">
-                  <span>{inv.invoiceNo}</span>
+                  <span>
+                    {inv.invoiceNo} (
+                    {vendors.find((v) => v.id === inv.vendorId)?.name})
+                  </span>
                   <span className="font-medium">${inv.balance.toFixed(2)}</span>
                 </div>
               ))}
@@ -973,6 +1119,8 @@ export default function AccountsPayable() {
             </button>
           </div>
         )}
+
+        {/* Payments Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
@@ -997,21 +1145,24 @@ export default function AccountsPayable() {
             <tbody className="bg-white divide-y divide-gray-200">
               {payments.map((p) => {
                 const v = vendors.find((x) => x.id === p.vendorId);
+                const paymentDateObj = p.date ? parseISO(p.date) : null;
+                const formattedDate = paymentDateObj
+                  ? format(paymentDateObj, "MMM d, yyyy")
+                  : "-";
+
                 return (
-                  <tr key={p.id}>
-                    <td className="px-6 py-4 text-sm">
-                      {format(parseISO(p.date), "MMM d, yyyy")}
-                    </td>
-                    <td className="px-6 py-4 text-sm">{v?.name}</td>
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm">{formattedDate}</td>
+                    <td className="px-6 py-4 text-sm">{v?.name || "-"}</td>
                     <td className="px-6 py-4 text-sm font-medium">
-                      ${p.amount.toFixed(2)}
+                      ${(p.amount ?? 0).toFixed(2)}
                     </td>
                     <td className="px-6 py-4 text-sm">{p.method}</td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 text-center">
                       {p.reconciled ? (
-                        <CheckCircle className="w-5 h-5 text-green-600" />
+                        <CheckCircle className="w-5 h-5 text-green-600 mx-auto" />
                       ) : (
-                        <XSquare className="w-5 h-5 text-red-600" />
+                        <XSquare className="w-5 h-5 text-red-600 mx-auto" />
                       )}
                     </td>
                   </tr>
@@ -1024,32 +1175,43 @@ export default function AccountsPayable() {
     );
   };
 
-  // ==================== RENDER ====================
+  // =============================================================================
+  // MAIN RENDER
+  // =============================================================================
   return (
     <>
       <div className="min-h-screen bg-gray-50">
         <div className="max-w-7xl mx-auto p-6 space-y-6">
+          {/* Header */}
           <div className="bg-white rounded-2xl shadow-sm p-6">
             <h1 className="text-3xl font-bold text-gray-800">
               Accounts Payable
             </h1>
-            <p className="text-gray-600 mt-1">Full-cycle AP with GL posting.</p>
+            <p className="text-gray-600 mt-1">
+              Full-cycle AP with GL posting, reconciliation, and reporting.
+            </p>
           </div>
+
+          {/* Tab Navigation */}
           <div className="flex space-x-1 bg-white rounded-xl shadow-sm p-1 overflow-x-auto">
             {["dashboard", "vendors", "invoices", "payments"].map((t) => (
               <button
                 key={t}
                 onClick={() => setSelectedTab(t)}
-                className={`px-4 py-2 rounded-lg font-medium capitalize ${
+                className={`px-6 py-2 rounded-lg font-medium capitalize transition-all ${
                   selectedTab === t
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-indigo-600 text-white shadow-md"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                {t === "vendors" ? "Vendors" : t}
+                {t === "vendors"
+                  ? "Vendors"
+                  : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
+
+          {/* Tab Content */}
           <div className="bg-white rounded-xl shadow-sm p-6">
             {selectedTab === "dashboard" && <DashboardTab />}
             {selectedTab === "vendors" && <VendorsTab />}
@@ -1058,6 +1220,8 @@ export default function AccountsPayable() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
       {showVendorModal && <VendorModal />}
       {showInvoiceModal && <InvoiceModal />}
       {showPaymentModal && <PaymentModal />}

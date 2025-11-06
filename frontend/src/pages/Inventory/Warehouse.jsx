@@ -1,10 +1,10 @@
 // src/pages/inventory/WarehouseBins.jsx
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import { Plus, Edit2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 export default function WarehouseBins() {
-  const { warehouses, setWarehouses, bins, setBins } = useOrderShipping();
+  const { warehouses, setWarehouses, bins, setBins } = useSales();
   const [showWhForm, setShowWhForm] = useState(false);
   const [showBinForm, setShowBinForm] = useState(false);
   const [editingWh, setEditingWh] = useState(null);

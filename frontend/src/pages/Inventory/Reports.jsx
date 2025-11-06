@@ -1,4 +1,4 @@
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import {
   BarChart,
   Bar,
@@ -35,7 +35,7 @@ export default function Reports() {
     products,
     purchaseOrders = [],
     grns = [],
-  } = useOrderShipping();
+  } = useSales();
   const [activeTab, setActiveTab] = useState("sales");
   const [dateRange, setDateRange] = useState("last30");
 

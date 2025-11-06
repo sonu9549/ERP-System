@@ -1,9 +1,359 @@
+// src/modules/hr/EmployeeManagement.jsx
 import React, { useState, useEffect, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import Papa from "papaparse";
-import Attendance from "./Attendance";
+import { useFinance } from "../../context/FinanceContext";
+import OnboardingModule from "./OnboardingModule";
+import Payroll from "./Payroll";
+// === ATTENDANCE COMPONENT (Fixed & Improved) ===
+const Attendance = ({
+  employees = [],
+  attendance = [],
+  setAttendance,
+  logAudit,
+  branchFilter = "All",
+}) => {
+  const today = format(new Date(), "yyyy-MM-dd");
+  const filtered = employees.filter(
+    (e) =>
+      e.status === "Active" &&
+      (branchFilter === "All" || e.branch === branchFilter)
+  );
 
-// Sub-components (can be moved to separate files later)
+  const markInOut = (empId, type) => {
+    const existing = attendance.find(
+      (a) => a.empId === empId && a.date === today
+    );
+    const time = new Date().toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    if (existing) {
+      if (type === "in" && existing.inTime) return alert("Already clocked in");
+      if (type === "out" && existing.outTime)
+        return alert("Already clocked out");
+
+      setAttendance((prev) =>
+        prev.map((a) =>
+          a.id === existing.id
+            ? { ...a, [type === "in" ? "inTime" : "outTime"]: time }
+            : a
+        )
+      );
+    } else {
+      setAttendance((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          empId,
+          date: today,
+          inTime: type === "in" ? time : null,
+          outTime: null,
+        },
+      ]);
+    }
+    logAudit(`Attendance ${type.toUpperCase()}`, { empId, time });
+  };
+
+  return (
+    <div>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Attendance</h2>
+      {filtered.length === 0 ? (
+        <p className="text-center text-gray-500 py-8">
+          No active employees in this branch
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead className="bg-gradient-to-r from-indigo-50 to-indigo-100">
+              <tr>
+                <th className="border p-2 text-left font-medium">Emp ID</th>
+                <th className="border p-2 text-left font-medium">Name</th>
+                <th className="border p-2 text-left font-medium">In</th>
+                <th className="border p-2 text-left font-medium">Out</th>
+                <th className="border p-2 text-left font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((emp) => {
+                const rec = attendance.find(
+                  (a) => a.empId === emp.id && a.date === today
+                );
+                return (
+                  <tr key={emp.id} className="hover:bg-gray-50">
+                    <td className="border p-2">{emp.empId}</td>
+                    <td className="border p-2 font-medium">{emp.name}</td>
+                    <td className="border p-2">{rec?.inTime || "-"}</td>
+                    <td className="border p-2">{rec?.outTime || "-"}</td>
+                    <td className="border p-2">
+                      <div className="flex gap-2">
+                        {!rec?.inTime && (
+                          <button
+                            onClick={() => markInOut(emp.id, "in")}
+                            className="bg-green-600 text-white px-3 py-1 rounded text-xs hover:bg-green-700"
+                          >
+                            IN
+                          </button>
+                        )}
+                        {rec?.inTime && !rec?.outTime && (
+                          <button
+                            onClick={() => markInOut(emp.id, "out")}
+                            className="bg-red-600 text-white px-3 py-1 rounded text-xs hover:bg-red-700"
+                          >
+                            OUT
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// === MAIN COMPONENT ===
+const EmployeeManagement = () => {
+  const finance = useFinance() || {};
+  const {
+    postToGL = () => {},
+    formatCurrency = (v) => `₹${v.toLocaleString()}`,
+    logAudit: financeLogAudit = () => {},
+    branches = ["HQ", "Unit A", "Unit B"],
+  } = finance;
+
+  // === LOCAL STATE (Safe Load) ===
+  const load = (key, fallback) => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved ? JSON.parse(saved) : fallback;
+    } catch {
+      return fallback;
+    }
+  };
+
+  const [employees, setEmployees] = useState(() => load("hr_employees", []));
+  const [leaves, setLeaves] = useState(() => load("hr_leaves", []));
+  const [attendance, setAttendance] = useState(() => load("hr_attendance", []));
+  const [auditLogs, setAuditLogs] = useState(() => load("hr_audit", []));
+  const [activeTab, setActiveTab] = useState("employees");
+  const [branchFilter, setBranchFilter] = useState("All");
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const user = { name: "HR Manager", ip: "192.168.1.20" };
+
+  // === AUTO-SAVE ===
+  useEffect(() => {
+    const save = (key, data) => {
+      try {
+        localStorage.setItem(key, JSON.stringify(data));
+      } catch (e) {
+        console.error("Save failed:", e);
+      }
+    };
+    save("hr_employees", employees);
+    save("hr_leaves", leaves);
+    save("hr_attendance", attendance);
+    save("hr_audit", auditLogs);
+  }, [employees, leaves, attendance, auditLogs]);
+
+  // === SEED DATA ===
+  useEffect(() => {
+    if (employees.length === 0) {
+      const seed = [
+        {
+          id: 1,
+          empId: "EMP001",
+          name: "Amit Sharma",
+          email: "amit@company.com",
+          phone: "9876543210",
+          branch: "HQ",
+          department: "Finance",
+          designation: "Accountant",
+          joinDate: "2023-01-15",
+          salary: 50000,
+          bankName: "HDFC",
+          accountNo: "1234567890",
+          ifsc: "HDFC0001234",
+          pan: "ABCDE1234F",
+          aadhaar: "1234-5678-9012",
+          status: "Active",
+        },
+      ];
+      setEmployees(seed);
+      logHR("HR Module Initialized");
+    }
+  }, [employees]);
+
+  // === AUDIT LOG ===
+  const logHR = (action, details = {}) => {
+    const log = {
+      timestamp: new Date().toISOString(),
+      action,
+      user: user.name,
+      details: typeof details === "object" ? JSON.stringify(details) : details,
+    };
+    setAuditLogs((prev) => [...prev, log]);
+    financeLogAudit?.("HR", action, details);
+  };
+
+  // === FILTERED EMPLOYEES ===
+  const filteredEmployees = useMemo(
+    () =>
+      employees.filter(
+        (e) => branchFilter === "All" || e.branch === branchFilter
+      ),
+    [employees, branchFilter]
+  );
+
+  // === TABS ===
+  const tabs = [
+    { id: "employees", label: "Employees" },
+    { id: "attendance", label: "Attendance" },
+    { id: "leaves", label: "Leave Management" },
+    { id: "payroll", label: "Payroll" },
+    { id: "documents", label: "Documents" },
+    { id: "reports", label: "HR Reports" },
+    { id: "audit", label: "Audit Trail" },
+    { id: "import", label: "Import / Export" },
+    { id: "onboarding", label: "Onboarding & Requisitions" },
+  ];
+
+  const leaveTypes = [
+    "Casual Leave (CL)",
+    "Sick Leave (SL)",
+    "Paid Leave (PL)",
+    "Unpaid Leave",
+  ];
+
+  return (
+    <div className="p-6 bg-gray-50 min-h-screen font-sans">
+      {/* HEADER */}
+      <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+        <h1 className="text-3xl font-bold text-gray-800">
+          HR & Employee Management
+        </h1>
+        <div className="flex flex-wrap gap-3">
+          <select
+            value={branchFilter}
+            onChange={(e) => setBranchFilter(e.target.value)}
+            className="border rounded px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500"
+          >
+            <option value="All">All Branches</option>
+            {branches.map((b) => (
+              <option key={b}>{b}</option>
+            ))}
+          </select>
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="bg-indigo-600 text-white px-5 py-2 rounded-lg shadow hover:bg-indigo-700 transition"
+          >
+            + Add Employee
+          </button>
+        </div>
+      </header>
+
+      {/* TABS */}
+      <nav className="flex flex-wrap gap-2 mb-6 overflow-x-auto border-b pb-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2 rounded-t-lg font-medium text-sm transition ${
+              activeTab === tab.id
+                ? "bg-indigo-600 text-white shadow"
+                : "bg-white border border-b-0 text-gray-700 hover:bg-gray-100"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
+
+      {/* CONTENT */}
+      <div className="bg-white rounded-xl shadow-lg p-6">
+        {/* EMPLOYEES */}
+        {activeTab === "employees" && (
+          <EmployeeDirectory
+            employees={filteredEmployees}
+            setEmployees={setEmployees}
+            logAudit={logHR}
+          />
+        )}
+
+        {/* ATTENDANCE */}
+        {activeTab === "attendance" && (
+          <Attendance
+            employees={employees}
+            attendance={attendance}
+            setAttendance={setAttendance}
+            logAudit={logHR}
+            branchFilter={branchFilter}
+          />
+        )}
+
+        {/* LEAVE MANAGEMENT */}
+        {activeTab === "leaves" && (
+          <LeaveManagement
+            employees={employees}
+            leaves={leaves}
+            setLeaves={setLeaves}
+            logAudit={logHR}
+            leaveTypes={leaveTypes}
+          />
+        )}
+
+        {/* PAYROLL SYNC */}
+        {activeTab === "payroll" && <Payroll />}
+
+        {/* DOCUMENTS */}
+        {activeTab === "documents" && <DocumentVault employees={employees} />}
+
+        {/* REPORTS */}
+        {activeTab === "reports" && (
+          <HRReports
+            employees={employees}
+            leaves={leaves}
+            attendance={attendance}
+          />
+        )}
+
+        {/* AUDIT TRAIL */}
+        {activeTab === "audit" && <HRAuditTrail logs={auditLogs} />}
+
+        {/* IMPORT/EXPORT */}
+        {activeTab === "import" && (
+          <HRImportExport employees={employees} setEmployees={setEmployees} />
+        )}
+
+        {/* ONBOARDING */}
+        {activeTab === "onboarding" && <OnboardingModule />}
+      </div>
+
+      {/* ADD EMPLOYEE MODAL */}
+      {showAddModal && (
+        <AddEmployeeModal
+          onClose={() => setShowAddModal(false)}
+          onSave={(emp) => {
+            const newEmp = { ...emp, id: Date.now(), status: "Active" };
+            setEmployees((prev) => [...prev, newEmp]);
+            logHR("Employee Added", { empId: emp.empId, name: emp.name });
+            setShowAddModal(false);
+          }}
+          branches={branches}
+        />
+      )}
+    </div>
+  );
+};
+
+// === SUB-COMPONENTS (All Updated & Safe) ===
+
 const EmployeeDirectory = ({ employees, setEmployees, logAudit }) => {
   const terminate = (id) => {
     setEmployees((prev) =>
@@ -12,71 +362,83 @@ const EmployeeDirectory = ({ employees, setEmployees, logAudit }) => {
           ? {
               ...e,
               status: "Terminated",
-              exitDate: new Date().toISOString().split("T")[0],
+              exitDate: format(new Date(), "yyyy-MM-dd"),
             }
           : e
       )
     );
-    logAudit("Terminated Employee", { id });
+    logAudit("Employee Terminated", { id });
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Employee Directory</h2>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">ID</th>
-            <th className="border p-2 text-left">Name</th>
-            <th className="border p-2 text-left">Department</th>
-            <th className="border p-2 text-left">Branch</th>
-            <th className="border p-2 text-left">Status</th>
-            <th className="border p-2 text-left">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {employees.map((e) => (
-            <tr key={e.id}>
-              <td className="border p-1">{e.empId}</td>
-              <td className="border p-1">{e.name}</td>
-              <td className="border p-1">{e.department}</td>
-              <td className="border p-1">{e.branch}</td>
-              <td className="border p-1">
-                <span
-                  className={`px-2 py-1 rounded text-xs ${
-                    e.status === "Active"
-                      ? "bg-green-100 text-green-800"
-                      : "bg-red-100 text-red-800"
-                  }`}
-                >
-                  {e.status}
-                </span>
-              </td>
-              <td className="border p-1">
-                {e.status === "Active" && (
-                  <button
-                    onClick={() => terminate(e.id)}
-                    className="text-red-600 text-xs hover:underline"
-                  >
-                    Terminate
-                  </button>
-                )}
-              </td>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">
+        Employee Directory
+      </h2>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-gradient-to-r from-indigo-50 to-indigo-100">
+            <tr>
+              <th className="border p-2 text-left font-medium">ID</th>
+              <th className="border p-2 text-left font-medium">Name</th>
+              <th className="border p-2 text-left font-medium">Dept</th>
+              <th className="border p-2 text-left font-medium">Branch</th>
+              <th className="border p-2 text-left font-medium">Status</th>
+              <th className="border p-2 text-left font-medium">Action</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {employees.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center p-6 text-gray-500">
+                  No employees
+                </td>
+              </tr>
+            ) : (
+              employees.map((e) => (
+                <tr key={e.id} className="hover:bg-gray-50">
+                  <td className="border p-2">{e.empId}</td>
+                  <td className="border p-2 font-medium">{e.name}</td>
+                  <td className="border p-2">{e.department}</td>
+                  <td className="border p-2">{e.branch}</td>
+                  <td className="border p-2">
+                    <span
+                      className={`px-3 py-1 rounded-full text-xs font-medium ${
+                        e.status === "Active"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {e.status}
+                    </span>
+                  </td>
+                  <td className="border p-2">
+                    {e.status === "Active" && (
+                      <button
+                        onClick={() => terminate(e.id)}
+                        className="text-red-600 text-xs hover:underline"
+                      >
+                        Terminate
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
 
-const AddEmployeeModal = ({ onClose, onSave, branches }) => {
+const AddEmployeeModal = ({ onClose, onSave, branches = [] }) => {
   const [form, setForm] = useState({
     empId: "",
     name: "",
     email: "",
     phone: "",
-    branch: "HQ",
+    branch: branches[0] || "",
     department: "",
     designation: "",
     joinDate: "",
@@ -89,117 +451,76 @@ const AddEmployeeModal = ({ onClose, onSave, branches }) => {
   });
 
   const handleSave = () => {
-    if (!form.empId || !form.name) return alert("ID & Name required");
-    onSave({ ...form, salary: +form.salary, status: "Active" });
+    if (!form.empId || !form.name) return alert("Emp ID & Name are required");
+    onSave({ ...form, salary: +form.salary || 0 });
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-xl shadow-xl w-full max-w-2xl max-h-screen overflow-y-auto">
-        <h3 className="text-xl font-bold mb-4">Add New Employee</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <input
-            placeholder="Emp ID"
-            value={form.empId}
-            onChange={(e) => setForm({ ...form, empId: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm({ ...form, email: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Phone"
-            value={form.phone}
-            onChange={(e) => setForm({ ...form, phone: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <select
-            value={form.branch}
-            onChange={(e) => setForm({ ...form, branch: e.target.value })}
-            className="border p-2 rounded"
-          >
-            {branches.map((b) => (
-              <option key={b}>{b}</option>
-            ))}
-          </select>
-          <input
-            placeholder="Department"
-            value={form.department}
-            onChange={(e) => setForm({ ...form, department: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Designation"
-            value={form.designation}
-            onChange={(e) => setForm({ ...form, designation: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            type="date"
-            placeholder="Join Date"
-            value={form.joinDate}
-            onChange={(e) => setForm({ ...form, joinDate: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            type="number"
-            placeholder="Salary"
-            value={form.salary}
-            onChange={(e) => setForm({ ...form, salary: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Bank Name"
-            value={form.bankName}
-            onChange={(e) => setForm({ ...form, bankName: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Account No"
-            value={form.accountNo}
-            onChange={(e) => setForm({ ...form, accountNo: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="IFSC"
-            value={form.ifsc}
-            onChange={(e) => setForm({ ...form, ifsc: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="PAN"
-            value={form.pan}
-            onChange={(e) => setForm({ ...form, pan: e.target.value })}
-            className="border p-2 rounded"
-          />
-          <input
-            placeholder="Aadhaar"
-            value={form.aadhaar}
-            onChange={(e) => setForm({ ...form, aadhaar: e.target.value })}
-            className="border p-2 rounded"
-          />
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white p-6 rounded-xl shadow-2xl w-full max-w-4xl max-h-screen overflow-y-auto">
+        <h3 className="text-xl font-bold mb-5 text-gray-800">
+          Add New Employee
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Object.keys(form).map((key) => {
+            if (key === "salary")
+              return (
+                <input
+                  key={key}
+                  type="number"
+                  placeholder="Salary"
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                  className="border rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                />
+              );
+            if (key === "joinDate")
+              return (
+                <input
+                  key={key}
+                  type="date"
+                  placeholder="Join Date"
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                  className="border rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                />
+              );
+            if (key === "branch")
+              return (
+                <select
+                  key={key}
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                  className="border rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+                >
+                  {branches.map((b) => (
+                    <option key={b}>{b}</option>
+                  ))}
+                </select>
+              );
+            return (
+              <input
+                key={key}
+                placeholder={key.charAt(0).toUpperCase() + key.slice(1)}
+                value={form[key]}
+                onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                className="border rounded px-3 py-2 focus:ring-2 focus:ring-indigo-500"
+              />
+            );
+          })}
         </div>
         <div className="flex justify-end gap-3 mt-6">
           <button
             onClick={onClose}
-            className="bg-gray-500 text-white px-4 py-2 rounded"
+            className="bg-gray-500 text-white px-5 py-2 rounded hover:bg-gray-600"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="bg-green-600 text-white px-4 py-2 rounded"
+            className="bg-green-600 text-white px-5 py-2 rounded hover:bg-green-700"
           >
-            Save Employee
+            Save
           </button>
         </div>
       </div>
@@ -208,36 +529,34 @@ const AddEmployeeModal = ({ onClose, onSave, branches }) => {
 };
 
 const LeaveManagement = ({
-  employees,
-  leaves,
+  employees = [],
+  leaves = [],
   setLeaves,
   logAudit,
-  leaveTypes,
+  leaveTypes = [],
 }) => {
   const [form, setForm] = useState({
     empId: "",
-    type: leaveTypes[0],
+    type: leaveTypes[0] || "",
     from: "",
     to: "",
     reason: "",
   });
 
   const applyLeave = () => {
-    if (!form.empId || !form.from || !form.to)
-      return alert("Select employee and dates");
+    if (!form.empId || !form.from || !form.to) return alert("Fill all fields");
     const newLeave = {
       ...form,
-      empId: +form.empId,
       id: Date.now(),
       status: "Pending",
-      appliedOn: new Date().toISOString().split("T")[0],
+      appliedOn: format(new Date(), "yyyy-MM-dd"),
     };
     setLeaves((prev) => [...prev, newLeave]);
     logAudit("Leave Applied", { empId: form.empId, type: form.type });
     setForm({ ...form, from: "", to: "", reason: "" });
   };
 
-  const approveLeave = (id) => {
+  const approve = (id) => {
     setLeaves((prev) =>
       prev.map((l) => (l.id === id ? { ...l, status: "Approved" } : l))
     );
@@ -246,12 +565,14 @@ const LeaveManagement = ({
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Leave Management</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">
+        Leave Management
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-indigo-50 rounded-lg">
         <select
           value={form.empId}
           onChange={(e) => setForm({ ...form, empId: e.target.value })}
-          className="border p-2 rounded"
+          className="border rounded px-3 py-2"
         >
           <option value="">Select Employee</option>
           {employees.map((e) => (
@@ -263,7 +584,7 @@ const LeaveManagement = ({
         <select
           value={form.type}
           onChange={(e) => setForm({ ...form, type: e.target.value })}
-          className="border p-2 rounded"
+          className="border rounded px-3 py-2"
         >
           {leaveTypes.map((t) => (
             <option key={t}>{t}</option>
@@ -273,113 +594,119 @@ const LeaveManagement = ({
           type="date"
           value={form.from}
           onChange={(e) => setForm({ ...form, from: e.target.value })}
-          className="border p-2 rounded"
+          className="border rounded px-3 py-2"
         />
         <input
           type="date"
           value={form.to}
           onChange={(e) => setForm({ ...form, to: e.target.value })}
-          className="border p-2 rounded"
+          className="border rounded px-3 py-2"
         />
         <input
           placeholder="Reason"
           value={form.reason}
           onChange={(e) => setForm({ ...form, reason: e.target.value })}
-          className="border p-2 rounded col-span-2"
+          className="border rounded px-3 py-2 col-span-2"
         />
         <button
           onClick={applyLeave}
-          className="bg-blue-600 text-white p-2 rounded"
+          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 col-span-3"
         >
           Apply Leave
         </button>
       </div>
-
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Employee</th>
-            <th className="border p-2 text-left">Type</th>
-            <th className="border p-2 text-left">From</th>
-            <th className="border p-2 text-left">To</th>
-            <th className="border p-2 text-left">Status</th>
-            <th className="border p-2 text-left">Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          {leaves.map((l) => {
-            const emp = employees.find((e) => e.id === l.empId);
-            return (
-              <tr key={l.id}>
-                <td className="border p-1">{emp?.name}</td>
-                <td className="border p-1">{l.type}</td>
-                <td className="border p-1">{l.from}</td>
-                <td className="border p-1">{l.to}</td>
-                <td className="border p-1">
-                  <span
-                    className={`px-2 py-1 rounded text-xs ${
-                      l.status === "Approved"
-                        ? "bg-green-100 text-green-800"
-                        : l.status === "Pending"
-                        ? "bg-yellow-100 text-yellow-800"
-                        : "bg-red-100 text-red-800"
-                    }`}
-                  >
-                    {l.status}
-                  </span>
-                </td>
-                <td className="border p-1">
-                  {l.status === "Pending" && (
-                    <button
-                      onClick={() => approveLeave(l.id)}
-                      className="text-green-600 text-xs hover:underline"
-                    >
-                      Approve
-                    </button>
-                  )}
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="bg-gradient-to-r from-indigo-50 to-indigo-100">
+            <tr>
+              <th className="border p-2 text-left font-medium">Employee</th>
+              <th className="border p-2 text-left font-medium">Type</th>
+              <th className="border p-2 text-left font-medium">From</th>
+              <th className="border p-2 text-left font-medium">To</th>
+              <th className="border p-2 text-left font-medium">Status</th>
+              <th className="border p-2 text-left font-medium">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {leaves.length === 0 ? (
+              <tr>
+                <td colSpan="6" className="text-center p-6 text-gray-500">
+                  No leave requests
                 </td>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            ) : (
+              leaves.map((l) => {
+                const emp = employees.find((e) => e.id === l.empId);
+                return (
+                  <tr key={l.id} className="hover:bg-gray-50">
+                    <td className="border p-2">{emp?.name || "—"}</td>
+                    <td className="border p-2">{l.type}</td>
+                    <td className="border p-2">{l.from}</td>
+                    <td className="border p-2">{l.to}</td>
+                    <td className="border p-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          l.status === "Approved"
+                            ? "bg-green-100 text-green-800"
+                            : "bg-yellow-100 text-yellow-800"
+                        }`}
+                      >
+                        {l.status}
+                      </span>
+                    </td>
+                    <td className="border p-2">
+                      {l.status === "Pending" && (
+                        <button
+                          onClick={() => approve(l.id)}
+                          className="text-green-600 text-xs hover:underline"
+                        >
+                          Approve
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };
 
-const DocumentVault = ({ employees }) => {
-  const [selectedEmp, setSelectedEmp] = useState(null);
-  const emp = employees.find((e) => e.id === selectedEmp);
+const DocumentVault = ({ employees = [] }) => {
+  const [selected, setSelected] = useState(null);
+  const emp = employees.find((e) => e.id === selected);
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Document Vault</h2>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Document Vault</h2>
       <select
-        value={selectedEmp}
-        onChange={(e) => setSelectedEmp(+e.target.value)}
-        className="border p-2 rounded mb-4 w-full md:w-64"
+        value={selected || ""}
+        onChange={(e) => setSelected(+e.target.value)}
+        className="border rounded px-4 py-2 mb-6 w-full md:w-64 focus:ring-2 focus:ring-indigo-500"
       >
-        <option>Select Employee</option>
+        <option value="">Select Employee</option>
         {employees.map((e) => (
           <option key={e.id} value={e.id}>
             {e.empId} - {e.name}
           </option>
         ))}
       </select>
-
       {emp && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border p-4 rounded">
-            <h3 className="font-semibold">PAN</h3>
-            <p>{emp.pan}</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="border p-5 rounded-lg bg-gray-50">
+            <h3 className="font-semibold text-gray-700 mb-2">PAN Card</h3>
+            <p className="font-mono">{emp.pan}</p>
           </div>
-          <div className="border p-4 rounded">
-            <h3 className="font-semibold">Aadhaar</h3>
-            <p>{emp.aadhaar}</p>
+          <div className="border p-5 rounded-lg bg-gray-50">
+            <h3 className="font-semibold text-gray-700 mb-2">Aadhaar</h3>
+            <p className="font-mono">{emp.aadhaar}</p>
           </div>
-          <div className="border p-4 rounded col-span-2">
-            <h3 className="font-semibold">Bank Details</h3>
-            <p>
+          <div className="border p-5 rounded-lg bg-gray-50 col-span-2">
+            <h3 className="font-semibold text-gray-700 mb-2">Bank Details</h3>
+            <p className="font-mono">
               {emp.bankName} | A/c: {emp.accountNo} | IFSC: {emp.ifsc}
             </p>
           </div>
@@ -389,102 +716,84 @@ const DocumentVault = ({ employees }) => {
   );
 };
 
-const HRReports = ({ employees, leaves, attendance }) => {
-  const activeCount = employees.filter((e) => e.status === "Active").length;
+const HRReports = ({ employees = [], leaves = [], attendance = [] }) => {
+  const active = employees.filter((e) => e.status === "Active").length;
   const totalSalary = employees
     .filter((e) => e.status === "Active")
-    .reduce((s, e) => s + e.salary, 0);
-  const pendingLeaves = leaves.filter((l) => l.status === "Pending").length;
+    .reduce((s, e) => s + (e.salary || 0), 0);
+  const pending = leaves.filter((l) => l.status === "Pending").length;
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">HR Reports</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div className="bg-blue-50 p-6 rounded-lg">
+      <h2 className="text-2xl font-bold mb-6 text-gray-800">HR Reports</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="bg-gradient-to-br from-blue-50 to-blue-100 p-6 rounded-xl shadow">
           <h3 className="text-lg font-semibold text-blue-800">
             Active Employees
           </h3>
-          <p className="text-3xl font-bold text-blue-600">{activeCount}</p>
+          <p className="text-4xl font-bold text-blue-600 mt-2">{active}</p>
         </div>
-        <div className="bg-green-50 p-6 rounded-lg">
+        <div className="bg-gradient-to-br from-green-50 to-green-100 p-6 rounded-xl shadow">
           <h3 className="text-lg font-semibold text-green-800">
             Total Payroll
           </h3>
-          <p className="text-3xl font-bold text-green-600">
+          <p className="text-4xl font-bold text-green-600 mt-2">
             ₹{totalSalary.toLocaleString()}
           </p>
         </div>
-        <div className="bg-yellow-50 p-6 rounded-lg">
+        <div className="bg-gradient-to-br from-yellow-50 to-yellow-100 p-6 rounded-xl shadow">
           <h3 className="text-lg font-semibold text-yellow-800">
             Pending Leaves
           </h3>
-          <p className="text-3xl font-bold text-yellow-600">{pendingLeaves}</p>
+          <p className="text-4xl font-bold text-yellow-600 mt-2">{pending}</p>
         </div>
       </div>
-
-      <h3 className="text-xl font-semibold mb-3">Employee Summary</h3>
-      <table className="w-full border-collapse text-sm">
-        <thead>
-          <tr className="bg-gray-100">
-            <th className="border p-2 text-left">Branch</th>
-            <th className="border p-2 text-left">Active</th>
-            <th className="border p-2 text-left">Terminated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {["HQ", "Unit A", "Unit B"].map((b) => {
-            const active = employees.filter(
-              (e) => e.branch === b && e.status === "Active"
-            ).length;
-            const terminated = employees.filter(
-              (e) => e.branch === b && e.status === "Terminated"
-            ).length;
-            return (
-              <tr key={b}>
-                <td className="border p-1">{b}</td>
-                <td className="border p-1">{active}</td>
-                <td className="border p-1">{terminated}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
     </div>
   );
 };
 
-const HRAuditTrail = ({ logs }) => (
+const HRAuditTrail = ({ logs = [] }) => (
   <div>
-    <h2 className="text-2xl font-bold mb-4">HR Audit Trail</h2>
-    <table className="w-full border-collapse text-sm">
-      <thead>
-        <tr className="bg-gray-100">
-          <th className="border p-2 text-left">Time</th>
-          <th className="border p-2 text-left">User</th>
-          <th className="border p-2 text-left">Action</th>
-          <th className="border p-2 text-left">Details</th>
-        </tr>
-      </thead>
-      <tbody>
-        {logs
-          .slice()
-          .reverse()
-          .map((log, i) => (
-            <tr key={i}>
-              <td className="border p-1">
-                {format(parseISO(log.timestamp), "dd MMM yyyy HH:mm")}
+    <h2 className="text-2xl font-bold mb-4 text-gray-800">Audit Trail</h2>
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-sm">
+        <thead className="bg-gradient-to-r from-indigo-50 to-indigo-100">
+          <tr>
+            <th className="border p-2 text-left font-medium">Time</th>
+            <th className="border p-2 text-left font-medium">User</th>
+            <th className="border p-2 text-left font-medium">Action</th>
+            <th className="border p-2 text-left font-medium">Details</th>
+          </tr>
+        </thead>
+        <tbody>
+          {logs.length === 0 ? (
+            <tr>
+              <td colSpan="4" className="text-center p-6 text-gray-500">
+                No logs
               </td>
-              <td className="border p-1">{log.user}</td>
-              <td className="border p-1">{log.action}</td>
-              <td className="border p-1">{log.details}</td>
             </tr>
-          ))}
-      </tbody>
-    </table>
+          ) : (
+            logs
+              .slice()
+              .reverse()
+              .map((log, i) => (
+                <tr key={i} className="hover:bg-gray-50">
+                  <td className="border p-2">
+                    {format(parseISO(log.timestamp), "dd MMM yyyy HH:mm")}
+                  </td>
+                  <td className="border p-2">{log.user}</td>
+                  <td className="border p-2 font-medium">{log.action}</td>
+                  <td className="border p-2 text-xs">{log.details}</td>
+                </tr>
+              ))
+          )}
+        </tbody>
+      </table>
+    </div>
   </div>
 );
 
-const HRImportExport = ({ employees, setEmployees }) => {
+const HRImportExport = ({ employees = [], setEmployees }) => {
   const exportCSV = () => {
     const csv = Papa.unparse(
       employees.map((e) => ({
@@ -504,8 +813,9 @@ const HRImportExport = ({ employees, setEmployees }) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "employees.csv";
+    a.download = `employees_${format(new Date(), "yyyyMMdd")}.csv`;
     a.click();
+    URL.revokeObjectURL(url);
   };
 
   const importCSV = (e) => {
@@ -513,106 +823,89 @@ const HRImportExport = ({ employees, setEmployees }) => {
     if (!file) return;
     Papa.parse(file, {
       header: true,
-      complete: (results) => {
-        const imported = results.data.map((d, i) => ({
-          ...d,
-          id: Date.now() + i,
-          salary: +d.salary || 0,
-        }));
+      complete: (res) => {
+        const imported = res.data
+          .filter((d) => d.empId && d.name)
+          .map((d, i) => ({
+            ...d,
+            id: Date.now() + i,
+            salary: +d.salary || 0,
+            status: d.status || "Active",
+          }));
         setEmployees((prev) => [...prev, ...imported]);
+        alert(`${imported.length} employees imported`);
       },
     });
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Import / Export</h2>
-      <div className="space-y-4">
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">Import / Export</h2>
+      <div className="flex flex-col md:flex-row gap-4">
         <button
           onClick={exportCSV}
-          className="bg-blue-600 text-white px-4 py-2 rounded"
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg shadow hover:bg-blue-700"
         >
-          Export Employees (CSV)
+          Export to CSV
         </button>
         <div>
           <input
             type="file"
             accept=".csv"
             onChange={importCSV}
-            className="border p-2 rounded"
+            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
           />
-          <p className="text-sm text-gray-600 mt-1">
-            Import Employees from CSV
-          </p>
+          <p className="text-xs text-gray-600 mt-1">Upload CSV to import</p>
         </div>
       </div>
     </div>
   );
 };
 
-const OnboardingOffboarding = () => (
-  <div>
-    <h2 className="text-2xl font-bold mb-4">Onboarding & Offboarding</h2>
-    <p className="text-gray-600">
-      Onboarding checklist and exit process will be implemented here.
-    </p>
-  </div>
-);
-
-const PayrollSync = ({ employees, accounts, postToGL, logAudit }) => {
+const PayrollSync = ({
+  employees = [],
+  postToGL,
+  logAudit,
+  formatCurrency,
+}) => {
   const runPayroll = () => {
-    const salaryAccount = accounts.find((a) => a.name === "Salary Expense");
-    if (!salaryAccount) return alert("Salary Expense account not found in GL");
+    const active = employees.filter((e) => e.status === "Active");
+    const total = active.reduce((s, e) => s + (e.salary || 0), 0);
+    if (total === 0) return alert("No active employees");
 
-    const activeEmployees = employees.filter((e) => e.status === "Active");
-    const totalSalary = activeEmployees.reduce((s, e) => s + e.salary, 0);
-
-    const lines = activeEmployees.map((emp) => ({
-      accountId: salaryAccount.id,
-      debit: emp.salary,
-      credit: 0,
-      memo: `Salary - ${emp.name}`,
-    }));
-
-    const cashLine = {
-      accountId: accounts.find((a) => a.name === "Cash")?.id || 1,
-      debit: 0,
-      credit: totalSalary,
-    };
-
-    postToGL({
-      date: new Date().toISOString().split("T")[0],
-      ref: "PAYROLL",
-      desc: `Monthly Payroll - ${activeEmployees.length} employees`,
-      branch: "HQ",
-      lines: [...lines, cashLine],
-      posted: true,
-    });
-
-    logAudit("Payroll Synced to GL", {
-      total: totalSalary,
-      count: activeEmployees.length,
-    });
-    alert(`Payroll ₹${totalSalary.toLocaleString()} posted to GL`);
+    postToGL(
+      "Salary Expense",
+      "Cash",
+      total,
+      `Payroll - ${active.length} employees`,
+      `PAY-${Date.now()}`
+    );
+    logAudit("Payroll Posted to GL", { total, count: active.length });
+    alert(`Payroll ₹${total.toLocaleString()} posted to GL`);
   };
 
   return (
     <div>
-      <h2 className="text-2xl font-bold mb-4">Payroll to GL Sync</h2>
-      <p className="mb-4">
-        Active Employees:{" "}
-        {employees.filter((e) => e.status === "Active").length}
-      </p>
-      <p className="mb-6 font-semibold">
-        Total Salary: ₹
-        {employees
-          .filter((e) => e.status === "Active")
-          .reduce((s, e) => s + e.salary, 0)
-          .toLocaleString()}
-      </p>
+      <h2 className="text-2xl font-bold mb-4 text-gray-800">
+        Payroll to GL Sync
+      </h2>
+      <div className="bg-gradient-to-r from-indigo-50 to-indigo-100 p-6 rounded-lg mb-6">
+        <p className="text-lg">
+          <strong>Active Employees:</strong>{" "}
+          {employees.filter((e) => e.status === "Active").length}
+        </p>
+        <p className="text-2xl font-bold mt-2">
+          <strong>Total Payroll:</strong>{" "}
+          {formatCurrency(
+            employees
+              .filter((e) => e.status === "Active")
+              .reduce((s, e) => s + (e.salary || 0), 0)
+          )}
+        </p>
+      </div>
       <button
         onClick={runPayroll}
-        className="bg-green-600 text-white px-6 py-3 rounded-lg shadow hover:bg-green-700"
+        className="bg-green-600 text-white px-8 py-3 rounded-lg shadow-lg hover:bg-green-700 transition text-lg font-semibold"
       >
         Run Payroll & Post to GL
       </button>
@@ -620,262 +913,4 @@ const PayrollSync = ({ employees, accounts, postToGL, logAudit }) => {
   );
 };
 
-// Main Component
-const EmploymentManagement = ({
-  accounts = [],
-  journalEntries = [],
-  postToGL = () => {},
-}) => {
-  const [activeTab, setActiveTab] = useState("employees");
-  const [branchFilter, setBranchFilter] = useState("All");
-  const [employees, setEmployees] = useState([]);
-  const [leaves, setLeaves] = useState([]);
-  const [attendance, setAttendance] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [showAddEmployee, setShowAddEmployee] = useState(false);
-
-  const user = { name: "hr_manager", ip: "192.168.1.20" };
-
-  const tabs = [
-    { id: "employees", label: "Employees" },
-    { id: "onboarding", label: "Onboarding" },
-    { id: "leaves", label: "Leave Management" },
-    { id: "attendance", label: "Attendance" },
-    { id: "payroll", label: "Payroll Sync" },
-    { id: "documents", label: "Documents" },
-    { id: "reports", label: "HR Reports" },
-    { id: "audit", label: "Audit Trail" },
-    { id: "import", label: "Import / Export" },
-  ];
-
-  const branches = ["HQ", "Unit A", "Unit B"];
-  const leaveTypes = [
-    "Casual Leave (CL)",
-    "Sick Leave (SL)",
-    "Paid Leave (PL)",
-    "Unpaid Leave",
-  ];
-
-  // Load + Seed
-  useEffect(() => {
-    const data = {
-      employees: JSON.parse(localStorage.getItem("hr_employees")) || [],
-      leaves: JSON.parse(localStorage.getItem("hr_leaves")) || [],
-      attendance: JSON.parse(localStorage.getItem("hr_attendance")) || [],
-      auditLogs: JSON.parse(localStorage.getItem("hr_audit")) || [],
-    };
-
-    if (data.employees.length === 0) {
-      const seed = [
-        {
-          id: 1,
-          empId: "EMP001",
-          name: "Amit Sharma",
-          email: "amit@company.com",
-          phone: "9876543210",
-          branch: "HQ",
-          department: "Finance",
-          designation: "Accountant",
-          joinDate: "2023-01-15",
-          salary: 50000,
-          bankName: "HDFC Bank",
-          accountNo: "1234567890",
-          ifsc: "HDFC0001234",
-          pan: "ABCDE1234F",
-          aadhaar: "1234-5678-9012",
-          status: "Active",
-        },
-      ];
-      setEmployees(seed);
-      localStorage.setItem("hr_employees", JSON.stringify(seed));
-    } else {
-      setEmployees(data.employees);
-    }
-
-    if (data.attendance.length === 0) {
-      const seedAttendance = [
-        {
-          id: 1,
-          empId: 1,
-          date: "2025-04-01",
-          inTime: "09:15",
-          outTime: "18:30",
-          status: "Late",
-          lateBy: 15,
-          totalHours: "9.25",
-          overtime: "0.25",
-        },
-        {
-          id: 2,
-          empId: 1,
-          date: "2025-04-02",
-          inTime: "08:55",
-          outTime: "19:00",
-          status: "Present",
-          lateBy: 0,
-          totalHours: "10.08",
-          overtime: "1.08",
-        },
-      ];
-      setAttendance(seedAttendance);
-      localStorage.setItem("hr_attendance", JSON.stringify(seedAttendance));
-    } else {
-      setAttendance(data.attendance);
-    }
-
-    setLeaves(data.leaves);
-    setAuditLogs(
-      data.auditLogs.length
-        ? data.auditLogs
-        : [
-            {
-              timestamp: new Date().toISOString(),
-              action: "HR Module Initialized",
-              user: user.name,
-            },
-          ]
-    );
-  }, []);
-
-  // Persist
-  useEffect(
-    () => localStorage.setItem("hr_employees", JSON.stringify(employees)),
-    [employees]
-  );
-  useEffect(
-    () => localStorage.setItem("hr_leaves", JSON.stringify(leaves)),
-    [leaves]
-  );
-  useEffect(
-    () => localStorage.setItem("hr_attendance", JSON.stringify(attendance)),
-    [attendance]
-  );
-  useEffect(
-    () => localStorage.setItem("hr_audit", JSON.stringify(auditLogs)),
-    [auditLogs]
-  );
-
-  const logAudit = (action, details = {}) => {
-    const log = {
-      timestamp: new Date().toISOString(),
-      action,
-      user: user.name,
-      details: JSON.stringify(details),
-    };
-    setAuditLogs((prev) => [...prev, log]);
-  };
-
-  const filteredEmployees = useMemo(() => {
-    return employees.filter(
-      (e) => branchFilter === "All" || e.branch === branchFilter
-    );
-  }, [employees, branchFilter]);
-
-  return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <header className="flex flex-col md:flex-row justify-between mb-6 gap-4">
-        <h1 className="text-3xl font-bold text-gray-800">
-          HR & Employment Management
-        </h1>
-        <div className="flex flex-wrap gap-3 items-center">
-          <select
-            value={branchFilter}
-            onChange={(e) => setBranchFilter(e.target.value)}
-            className="border p-2 rounded"
-          >
-            <option>All</option>
-            {branches.map((b) => (
-              <option key={b}>{b}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => setShowAddEmployee(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded shadow hover:bg-blue-700"
-          >
-            + Add Employee
-          </button>
-        </div>
-      </header>
-
-      <nav className="flex flex-wrap gap-2 mb-6 overflow-x-auto">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`px-4 py-2 rounded-lg font-medium whitespace-nowrap ${
-              activeTab === tab.id
-                ? "bg-blue-600 text-white shadow"
-                : "bg-white border text-gray-700 hover:bg-gray-100"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </nav>
-
-      <div className="bg-white rounded-xl shadow p-6">
-        {activeTab === "employees" && (
-          <EmployeeDirectory
-            employees={filteredEmployees}
-            setEmployees={setEmployees}
-            logAudit={logAudit}
-          />
-        )}
-        {activeTab === "onboarding" && <OnboardingOffboarding />}
-        {activeTab === "leaves" && (
-          <LeaveManagement
-            employees={employees}
-            leaves={leaves}
-            setLeaves={setLeaves}
-            logAudit={logAudit}
-            leaveTypes={leaveTypes}
-          />
-        )}
-        {activeTab === "attendance" && (
-          <Attendance
-            employees={employees}
-            leaves={leaves}
-            attendance={attendance}
-            setAttendance={setAttendance}
-            logAudit={logAudit}
-            branchFilter={branchFilter}
-          />
-        )}
-        {activeTab === "payroll" && (
-          <PayrollSync
-            employees={employees}
-            accounts={accounts}
-            postToGL={postToGL}
-            logAudit={logAudit}
-          />
-        )}
-        {activeTab === "documents" && <DocumentVault employees={employees} />}
-        {activeTab === "reports" && (
-          <HRReports
-            employees={employees}
-            leaves={leaves}
-            attendance={attendance}
-          />
-        )}
-        {activeTab === "audit" && <HRAuditTrail logs={auditLogs} />}
-        {activeTab === "import" && (
-          <HRImportExport employees={employees} setEmployees={setEmployees} />
-        )}
-      </div>
-
-      {showAddEmployee && (
-        <AddEmployeeModal
-          onClose={() => setShowAddEmployee(false)}
-          onSave={(emp) => {
-            setEmployees((prev) => [...prev, { ...emp, id: Date.now() }]);
-            logAudit("Added Employee", { empId: emp.empId, name: emp.name });
-            setShowAddEmployee(false);
-          }}
-          branches={branches}
-        />
-      )}
-    </div>
-  );
-};
-
-export default EmploymentManagement;
+export default EmployeeManagement;

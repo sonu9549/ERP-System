@@ -1,9 +1,10 @@
-import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { useAuth, ROLES } from "../context/AuthContext";
+import React, { useState, useMemo, useCallback } from "react";
+import { NavLink, useLocation } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { ROLES } from "../constants/roles";
+import { MODULE_ACCESS } from "../config/moduleAccessConfig";
 import {
   ChevronDown,
-  ChevronRight,
   Users,
   FileText,
   Clock,
@@ -25,11 +26,9 @@ import {
   FileSpreadsheet,
   FileBarChart,
   LineChart,
-  Clipboard,
   CheckSquare,
   RefreshCw,
   DollarSign,
-  FileText as InvoiceIcon,
   Mail,
   Target,
   Headphones,
@@ -37,470 +36,408 @@ import {
   HeartHandshake,
   ShieldCheck,
   FolderTree,
-  Database,
-  Building,
-  Boxes,
   AlertTriangle,
   Recycle,
+  Database,
+  Boxes,
 } from "lucide-react";
 
+// Reusable Icon Component
+const MenuIcon = ({ icon: Icon, size = 16, className = "" }) => {
+  return Icon ? <Icon size={size} className={className} /> : null;
+};
+
+// === MODULES (No minRole, No Hardcoding) ===
 const modules = [
-  { path: "/", label: "Dashboard", icon: "📊" },
+  { path: "/", label: "Dashboard", icon: BarChart3 },
 
   // INVENTORY
   {
+    id: "inventory",
     label: "Inventory",
-    icon: "📦",
-    minRole: ROLES.SUPER_ADMIN,
+    icon: Package,
     submodules: [
-      {
-        path: "/inventory/dashboard",
-        label: "Dashboard",
-        icon: <BarChart3 size={16} />,
-      },
+      { path: "/inventory/dashboard", label: "Dashboard", icon: BarChart3 },
       {
         path: "/inventory/stock",
         label: "Stock Management",
-        icon: <ChartCandlestick size={16} />,
+        icon: ChartCandlestick,
       },
-      {
-        path: "/inventory/warehouse",
-        label: "Warehouse",
-        icon: <Warehouse size={16} />,
-      },
-      {
-        path: "/inventory/products",
-        label: "Products",
-        icon: <ShoppingCart size={16} />,
-      },
-      {
-        path: "/inventory/suppliers",
-        label: "Suppliers",
-        icon: <Users size={16} />,
-      },
-      {
-        path: "/inventory/st",
-        label: "Stock Transactions",
-        icon: <RefreshCw size={16} />,
-      },
+      { path: "/inventory/warehouse", label: "Warehouse", icon: Warehouse },
+      { path: "/inventory/products", label: "Products", icon: ShoppingCart },
+      { path: "/inventory/suppliers", label: "Suppliers", icon: Users },
+      { path: "/inventory/st", label: "Stock Transactions", icon: RefreshCw },
       {
         path: "/inventory/purchase_manage",
         label: "Purchase Management",
-        icon: <ClipboardList size={16} />,
+        icon: ClipboardList,
       },
-      {
-        path: "/inventory/reports",
-        label: "Reports",
-        icon: <FileBarChart size={16} />,
-      },
+      { path: "/inventory/reports", label: "Reports", icon: FileBarChart },
     ],
   },
 
   // SALES
   {
+    id: "sales",
     label: "Sales",
-    icon: <DollarSign size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: DollarSign,
     submodules: [
-      {
-        path: "/sales/cm",
-        label: "Customers Master",
-        icon: <Users size={16} />,
-      },
-      {
-        path: "/sales/orders",
-        label: "Sales Order",
-        icon: <ClipboardCheck size={16} />,
-      },
-      {
-        path: "/sales/shipping",
-        label: "Shipping & Delivery",
-        icon: <Truck size={16} />,
-      },
-      {
-        path: "/sales/invoice",
-        label: "Billing & Invoicing",
-        icon: <InvoiceIcon size={16} />,
-      },
-
-      {
-        path: "/sales/analytics",
-        label: "Sales Analytics",
-        icon: <LineChart size={16} />,
-      },
-      {
-        path: "/sales/returns",
-        label: "Returns",
-        icon: <RefreshCw size={16} />,
-      },
+      { path: "/sales", label: "Overview", icon: Users },
+      { path: "/sales/cm", label: "Customers Master", icon: Users },
+      { path: "/sales/orders", label: "Sales Order", icon: ClipboardCheck },
+      { path: "/sales/shipping", label: "Shipping & Delivery", icon: Truck },
+      { path: "/sales/invoice", label: "Billing & Invoicing", icon: FileText },
+      { path: "/sales/analytics", label: "Sales Analytics", icon: LineChart },
+      { path: "/sales/returns", label: "Returns", icon: RefreshCw },
     ],
   },
 
   // CRM
   {
+    id: "crm",
     label: "CRM",
-    icon: <HeartHandshake size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: HeartHandshake,
     submodules: [
-      { path: "/crm/cm", label: "Customer Master", icon: <Users size={16} /> },
-      {
-        path: "/crm/leads",
-        label: "Leads & Opportunity",
-        icon: <Target size={16} />,
-      },
+      { path: "/crm/cm", label: "Customer Master", icon: Users },
+      { path: "/crm/leads", label: "Leads & Opportunity", icon: Target },
       {
         path: "/crm/customer-support",
         label: "Customer Support",
-        icon: <Headphones size={16} />,
+        icon: Headphones,
       },
       {
-        path: "/crm/followups",
-        label: "Follow-ups",
-        icon: <Repeat size={16} />,
+        path: "/crm/sef",
+        label: "Sales Engagement & Follow-ups",
+        icon: Repeat,
       },
-      {
-        path: "/crm/loyalty",
-        label: "Loyalty Program",
-        icon: <HeartHandshake size={16} />,
-      },
-      {
-        path: "/crm/crm-analytics",
-        label: "CRM Analytics",
-        icon: <BarChart3 size={16} />,
-      },
+      { path: "/crm/loyalty", label: "Loyalty Program", icon: HeartHandshake },
+      { path: "/crm/analytics", label: "CRM Analytics", icon: BarChart3 },
     ],
   },
 
-  // HR MODULE
+  // HR
   {
+    id: "hr",
     label: "Human Resources",
-    icon: <Users size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: Users,
     submodules: [
-      {
-        path: "/hr/employees",
-        label: "Employee Management",
-        icon: <Users size={14} />,
-      },
+      { path: "/hr/employees", label: "Employee Management", icon: Users },
       {
         path: "/hr/recruitment",
         label: "Recruitment & Onboarding",
-        icon: <FileText size={14} />,
+        icon: FileText,
       },
-      {
-        path: "/hr/attendance",
-        label: "Attendance & Time",
-        icon: <Clock size={14} />,
-      },
-      {
-        path: "/hr/payroll",
-        label: "Payroll Management",
-        icon: <Briefcase size={14} />,
-      },
+      { path: "/hr/attendance", label: "Attendance & Time", icon: Clock },
+      { path: "/hr/payroll", label: "Payroll Management", icon: Briefcase },
       {
         path: "/hr/performance",
         label: "Performance & Appraisal",
-        icon: <TrendingUp size={14} />,
+        icon: TrendingUp,
       },
     ],
   },
 
   // FINANCE
   {
+    id: "finance",
     label: "Finance",
-    icon: <Calculator size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: Calculator,
     submodules: [
       {
         path: "/finance/ledger",
         label: "General Ledger",
-        icon: <FileSpreadsheet size={16} />,
+        icon: FileSpreadsheet,
       },
-      {
-        path: "/finance/ap",
-        label: "Accounts Payable",
-        icon: <ClipboardList size={16} />,
-      },
-      {
-        path: "/finance/ar",
-        label: "Accounts Receivable",
-        icon: <FileText size={16} />,
-      },
+      { path: "/finance/ap", label: "Accounts Payable", icon: ClipboardList },
+      { path: "/finance/ar", label: "Accounts Receivable", icon: FileText },
       {
         path: "/finance/fam",
         label: "Fixed Assets Management",
-        icon: <FileText size={16} />,
+        icon: Building2,
       },
       {
         path: "/finance/bf",
         label: "Budgeting and Forecasting",
-        icon: <FileText size={16} />,
+        icon: LineChart,
       },
       {
         path: "/finance/co",
-        label: "Cost Accounting/Controlling(CO)",
-        icon: <FileText size={16} />,
+        label: "Cost Accounting/Controlling",
+        icon: Calculator,
       },
-      {
-        path: "/finance/fscm",
-        label: "Financial Supply Chain Management",
-        icon: <FileText size={16} />,
-      },
+      { path: "/finance/fscm", label: "Financial Supply Chain", icon: Boxes },
       {
         path: "/finance/taxcomp",
         label: "Taxation & Compliance",
-        icon: <ShieldCheck size={16} />,
+        icon: ShieldCheck,
       },
-      {
-        path: "/finance/reports",
-        label: "Reports",
-        icon: <FileBarChart size={16} />,
-      },
+      { path: "/finance/reports", label: "Reports", icon: FileBarChart },
     ],
   },
 
   // QUALITY
   {
+    id: "quality",
     label: "Quality Management",
-    icon: <CheckSquare size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: CheckSquare,
     submodules: [
       {
         path: "/quality/iqc",
         label: "Incoming Quality Control",
-        icon: <ClipboardCheck size={16} />,
+        icon: ClipboardCheck,
       },
-      {
-        path: "/quality/ipqc",
-        label: "IPQC",
-        icon: <ClipboardList size={16} />,
-      },
-      { path: "/quality/fqc", label: "FQC", icon: <FileText size={16} /> },
-      {
-        path: "/quality/qip",
-        label: "Inspection Plan",
-        icon: <FolderTree size={16} />,
-      },
-      { path: "/quality/ncm", label: "NCM", icon: <AlertTriangle size={16} /> },
-      {
-        path: "/quality/qc",
-        label: "Quality Certificates",
-        icon: <ShieldCheck size={16} />,
-      },
+      { path: "/quality/ipqc", label: "IPQC", icon: ClipboardList },
+      { path: "/quality/fqc", label: "FQC", icon: FileText },
+      { path: "/quality/ip", label: "Inspection Plan", icon: FolderTree },
+      { path: "/quality/ncm", label: "NCM", icon: AlertTriangle },
+      { path: "/quality/qc", label: "Quality Certificates", icon: ShieldCheck },
     ],
   },
 
   // LOGISTICS
   {
+    id: "logistics",
     label: "Logistics",
-    icon: "🚚",
-    minRole: ROLES.SUPER_ADMIN,
+    icon: Truck,
     submodules: [
       {
         path: "/logistics/warehouse",
         label: "Warehouse Management",
-        icon: <Warehouse size={16} />,
+        icon: Warehouse,
       },
       {
         path: "/logistics/transport",
         label: "Transport Management",
-        icon: <Truck size={16} />,
+        icon: Truck,
       },
       {
         path: "/logistics/cross-docking",
         label: "Cross-Docking & Transfer",
-        icon: <RefreshCw size={16} />,
+        icon: RefreshCw,
       },
       {
         path: "/logistics/packaghandling",
         label: "Packaging & Handling",
-        icon: <Boxes size={16} />,
+        icon: Boxes,
       },
     ],
   },
 
   // PRODUCTION
   {
+    id: "production",
     label: "Production",
-    icon: <Factory size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: Factory,
     submodules: [
       {
-        path: "/production/mm",
-        label: "Material Master",
-        icon: <Database size={16} />,
+        path: "/production/ps",
+        label: "Planning/Scheduling",
+        icon: ClipboardList,
       },
-      {
-        path: "/production/bom",
-        label: "Bill of Materials",
-        icon: <Layers size={16} />,
-      },
-      {
-        path: "/production/pp",
-        label: "Production Planning",
-        icon: <ClipboardList size={16} />,
-      },
+      { path: "/production/bom", label: "Bill of Materials", icon: Layers },
+      { path: "/production/wo", label: "Work Orders", icon: Layers },
+      { path: "/production/qc", label: "Quality Control", icon: Layers },
+      { path: "/production/sfm", label: "Shop Floor Management", icon: Layers },
+      { path: "/production/im", label: "Inventory Materials ", icon: Database },
       {
         path: "/production/mct",
-        label: "Material Consumption Tracking",
-        icon: <ClipboardCheck size={16} />,
+        label: "Material Consumption",
+        icon: ClipboardCheck,
       },
-      {
-        path: "/production/wm",
-        label: "Wastage Management",
-        icon: <Recycle size={16} />,
-      },
+      { path: "/production/wm", label: "Wastage Management", icon: Recycle },
       {
         path: "/production/po",
         label: "Production Output & Yield",
-        icon: <FileSpreadsheet size={16} />,
+        icon: FileSpreadsheet,
       },
       {
         path: "/production/cv",
         label: "Costing & Valuation",
-        icon: <Calculator size={16} />,
+        icon: Calculator,
+      },
+      {
+        path: "/production/reporting",
+        label: "Reporting/Analytics ",
+        icon: Calculator,
       },
     ],
   },
 
   // PROCUREMENT
   {
+    id: "procurement",
     label: "Procurement",
-    icon: <ShoppingCart size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
+    icon: ShoppingCart,
     submodules: [
       {
         path: "/procurement/purchase-requisition",
         label: "Purchase Requisition",
-        icon: <ClipboardList size={16} />,
+        icon: ClipboardList,
       },
-      {
-        path: "/procurement/rq",
-        label: "Request Quotation",
-        icon: <Mail size={16} />,
-      },
-      {
-        path: "/procurement/po",
-        label: "Purchase Orders",
-        icon: <FileText size={16} />,
-      },
-      {
-        path: "/procurement/grn",
-        label: "GRN",
-        icon: <ClipboardCheck size={16} />,
-      },
-      {
-        path: "/procurement/pr",
-        label: "Purchase Return",
-        icon: <RefreshCw size={16} />,
-      },
+      { path: "/procurement/rq", label: "Request Quotation", icon: Mail },
+      { path: "/procurement/po", label: "Purchase Orders", icon: FileText },
+      { path: "/procurement/grn", label: "GRN", icon: ClipboardCheck },
+      { path: "/procurement/pr", label: "Purchase Return", icon: RefreshCw },
       {
         path: "/procurement/vrec",
         label: "Vendor Reconciliation",
-        icon: <HeartHandshake size={16} />,
+        icon: HeartHandshake,
       },
       {
         path: "/procurement/pa",
         label: "Procurement Analytics",
-        icon: <BarChart3 size={16} />,
+        icon: BarChart3,
       },
     ],
   },
 
-  // MULTIBRANCH
-  { path: "/multibranch", label: "Multibranch", icon: <Building2 size={18} /> },
-
-  // PLANT MAINTENANCE
-  { path: "/plant", label: "Plant Maintenance", icon: <Factory size={18} /> },
-
-  // SETTINGS
-  {
-    path: "/settings",
-    label: "Settings",
-    icon: <Settings size={18} />,
-    minRole: ROLES.SUPER_ADMIN,
-  },
+  // SINGLE LINKS
+  { path: "/multibranch", label: "Multibranch", icon: Building2 },
+  { path: "/plant", label: "Plant Maintenance", icon: Factory },
+  { path: "/settings", label: "Settings", icon: Settings },
 ];
 
 export const Sidebar = () => {
-  const { isSuperAdmin } = useAuth();
-  const [open, setOpen] = useState(null);
+  const { canAccess } = useAuth(); // Must have user.role
+  const location = useLocation();
+  const [openMenus, setOpenMenus] = useState({});
 
-  const visible = modules.filter((m) => !m.minRole || isSuperAdmin);
+  // === FILTER VISIBLE MODULES ===
+  const visible = useMemo(() => {
+    return modules
+      .map((module) => {
+        if (module.submodules) {
+          const accessibleSubs = module.submodules.filter((sub) =>
+            canAccess(sub.path)
+          );
+          if (accessibleSubs.length === 0) return null;
+          return { ...module, submodules: accessibleSubs };
+        } else {
+          return canAccess(module.path) ? module : null;
+        }
+      })
+      .filter(Boolean);
+  }, [canAccess]);
 
-  const toggleDropdown = (label) => {
-    setOpen(open === label ? null : label);
+  const toggleMenu = useCallback((id) => {
+    setOpenMenus((prev) => ({ ...prev, [id]: !prev[id] }));
+  }, []);
+
+  const isParentActive = (submodules) => {
+    return submodules.some((sub) => location.pathname.startsWith(sub.path));
   };
 
   return (
-    <aside className="w-64 bg-gray-900 text-gray-300 h-screen shadow-lg flex flex-col">
-      <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900">
-        <ul className="mt-2 space-y-1">
-          {visible.map((m) => (
-            <li key={m.label || m.path}>
-              {m.submodules ? (
-                <>
-                  <button
-                    onClick={() => toggleDropdown(m.label)}
-                    className="flex justify-between items-center w-full px-4 py-2 text-sm font-medium hover:bg-gray-800 rounded-md transition"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="text-lg">{m.icon}</span>
-                      {m.label}
-                    </span>
-                    {open === m.label ? (
-                      <ChevronDown size={16} />
-                    ) : (
-                      <ChevronRight size={16} />
-                    )}
-                  </button>
+    <aside className="w-64 bg-gray-900 text-gray-300 h-screen shadow-xl flex flex-col">
+      <nav className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 py-2">
+        <ul className="space-y-1 px-2">
+          {visible.map((module) => {
+            const id = module.id || module.path;
+            const hasSubmodules = !!module.submodules;
+            const isOpen = openMenus[id];
+            const isActiveParent =
+              hasSubmodules && isParentActive(module.submodules);
 
-                  <ul
-                    className={`ml-6 mt-1 space-y-1 overflow-hidden transition-all duration-300 ${
-                      open === m.label ? "max-h-96" : "max-h-0"
-                    }`}
+            return (
+              <li key={id}>
+                {hasSubmodules ? (
+                  <>
+                    <button
+                      onClick={() => toggleMenu(id)}
+                      className={`
+                        flex justify-between items-center w-full px-3 py-2.5 text-sm font-medium rounded-lg
+                        transition-all duration-200 group
+                        ${
+                          isActiveParent
+                            ? "bg-blue-600 text-white"
+                            : "hover:bg-gray-800"
+                        }
+                      `}
+                      aria-expanded={isOpen}
+                      aria-controls={`submenu-${id}`}
+                    >
+                      <span className="flex items-center gap-3">
+                        <MenuIcon
+                          icon={module.icon}
+                          size={18}
+                          className="text-inherit"
+                        />
+                        <span>{module.label}</span>
+                      </span>
+                      <ChevronDown
+                        size={16}
+                        className={`transition-transform duration-200 ${
+                          isOpen ? "rotate-180" : ""
+                        }`}
+                      />
+                    </button>
+
+                    <ul
+                      id={`submenu-${id}`}
+                      role="menu"
+                      className={`
+                        ml-8 mt-1 space-y-1 overflow-hidden
+                        grid transition-all duration-300 ease-in-out
+                        ${isOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}
+                      `}
+                    >
+                      <div className="min-h-0">
+                        {module.submodules.map((sub) => {
+                          const isActive = location.pathname === sub.path;
+                          return (
+                            <li key={sub.path} role="menuitem">
+                              <NavLink
+                                to={sub.path}
+                                className={`
+                                  flex items-center gap-2 px-3 py-1.5 text-sm rounded-md
+                                  transition-colors duration-200
+                                  ${
+                                    isActive
+                                      ? "bg-blue-600 text-white"
+                                      : "hover:bg-gray-800 hover:text-white"
+                                  }
+                                `}
+                              >
+                                <MenuIcon
+                                  icon={sub.icon}
+                                  className="text-inherit"
+                                />
+                                <span>{sub.label}</span>
+                              </NavLink>
+                            </li>
+                          );
+                        })}
+                      </div>
+                    </ul>
+                  </>
+                ) : (
+                  <NavLink
+                    to={module.path}
+                    className={({ isActive }) =>
+                      `
+                      flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg
+                      transition-all duration-200
+                      ${
+                        isActive
+                          ? "bg-blue-600 text-white"
+                          : "hover:bg-gray-800 hover:text-white"
+                      }
+                    `
+                    }
                   >
-                    {m.submodules.map((sub) => (
-                      <li key={sub.path}>
-                        <NavLink
-                          to={sub.path}
-                          className={({ isActive }) =>
-                            `flex items-center gap-2 px-3 py-1.5 text-sm rounded-md transition-colors duration-200 ${
-                              isActive
-                                ? "bg-blue-600 text-white"
-                                : "hover:bg-gray-800 hover:text-white"
-                            }`
-                          }
-                        >
-                          {sub.icon && <span>{sub.icon}</span>}
-                          {sub.label}
-                        </NavLink>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <NavLink
-                  to={m.path}
-                  className={({ isActive }) =>
-                    `flex items-center px-4 py-2 text-sm font-medium transition-colors duration-200 ${
-                      isActive
-                        ? "bg-blue-600 text-white"
-                        : "hover:bg-gray-800 hover:text-white"
-                    }`
-                  }
-                >
-                  <span className="mr-3 text-lg">{m.icon}</span>
-                  {m.label}
-                </NavLink>
-              )}
-            </li>
-          ))}
+                    <MenuIcon icon={module.icon} size={18} />
+                    <span>{module.label}</span>
+                  </NavLink>
+                )}
+              </li>
+            );
+          })}
         </ul>
       </nav>
 
       <div className="p-3 text-xs text-gray-500 border-t border-gray-700">
-        © 2025 NextGen Ledger
+        © 2025{" "}
+        <span className="font-semibold text-gray-400">NextGen Ledger</span>
       </div>
     </aside>
   );

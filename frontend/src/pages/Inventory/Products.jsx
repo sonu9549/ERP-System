@@ -1,10 +1,10 @@
 // src/pages/inventory/Products.jsx
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 import { Plus, Edit2, Trash2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 export default function Products() {
-  const { products, setProducts, stockLedger } = useOrderShipping();
+  const { products, setProducts, stockLedger } = useSales();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({

@@ -15,7 +15,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { useReactToPrint } from "react-to-print";
-import { useOrderShipping } from "../../context/OrderShippingContext";
+import { useSales } from "../../context/SalesContext";
 
 const formatRevenue = (value) => {
   if (!value) return "$0";
@@ -36,7 +36,7 @@ const returnReasons = [
 
 export default function Returns() {
   const { orders, returns, setReturns, createReturn, updateReturnStatus } =
-    useOrderShipping();
+    useSales();
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
