@@ -1,6 +1,6 @@
 // src/modules/analytics/CrmAnalytics.jsx
 import React, { useState, useMemo } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
 import {
   Chart as ChartJS,
@@ -37,13 +37,13 @@ export default function CrmAnalytics() {
     customers = [],
     sales = [],
     leads = [],
-    supportTickets = [], // ← this was missing → now fixed
+    supportTickets = [],
     loyaltyLedger = [],
     formatCurrency,
     branches = [],
     allCostCenters = [],
     logAudit,
-  } = useFinance();
+  } = useCrm();
 
   /* ------------------------------------------------------------------ */
   /*                              FILTER STATE                           */

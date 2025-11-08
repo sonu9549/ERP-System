@@ -1,21 +1,48 @@
 # app/api/v1/auth.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from datetime import timedelta
-from app.db.session import get_db
-from app.crud.user_crud import get_user_by_username
-from app.utils.hashing import verify_password
-from app.core.security import create_access_token
+from sqlmodel import select, Session
+from typing import Annotated
+
+from app.db.session import get_session
+from app.models.user import User
+from app.core.security import verify_password, create_access_token
 from app.core.config import settings
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/token")
-def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = get_user_by_username(db, form_data.username)
-    if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    token = create_access_token({"sub": user.username}, expires_delta=access_token_expires)
-    return {"access_token": token, "token_type": "bearer"}
+
+@router.post(
+    "/login",
+    summary="Obtain JWT access token",
+    responses={
+        200: {"description": "Token returned"},
+        401: {"description": "Invalid credentials"},
+    },
+)
+async def login(
+    form: Annotated[OAuth2PasswordRequestForm, Depends()],
+    session: Annotated[Session, Depends(get_session)],
+):
+    """
+    **OAuth2 password flow** – username = email.
+    """
+    user = session.exec(select(User).where(User.email == form.username)).first()
+
+    if not user or not verify_password(form.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    access_token = create_access_token(
+        data={"sub": str(user.id), "role": user.role},
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    }

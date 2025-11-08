@@ -1,10 +1,10 @@
 // src/components/CustomerMaster.jsx
 import React, { useState } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
 
 const CustomerMaster = () => {
-  const { customers, setCustomers, logAudit } = useFinance();
+  const { customers, setCustomers, logAudit } = useCrm();
 
   const [form, setForm] = useState({
     code: `CUS${String(customers.length + 1).padStart(3, "0")}`,

@@ -6,14 +6,12 @@ import {
   sampleInvoices,
   sampleJournalEntries,
   defaultPayments,
-  defaultBankTransactions,
   defaultCustomers,
   defaultArInvoices,
   defaultReceipts,
   defaultBudgets,
   defaultCostCenters,
   initialFinanceData,
-  sampleData, // ← Contains Loyalty + CRM sample data
 } from "../data/data";
 
 /* -------------------------------------------------------------------------- */
@@ -21,7 +19,15 @@ import {
 /* -------------------------------------------------------------------------- */
 const FinanceContext = createContext();
 
-export const FinanceProvider = ({ children }) => {
+export const FinanceProvider = ({ children, sharedState }) => {
+  const {
+    customers: sharedCustomers,
+    setCustomers: setSharedCustomers,
+    auditLogs,
+    setAuditLogs,
+    logAudit,
+  } = sharedState || {};
+
   /* --------------------------- LOCAL STORAGE HELPERS --------------------------- */
   const load = (key, fallback) => {
     const saved = localStorage.getItem(key);
@@ -46,9 +52,6 @@ export const FinanceProvider = ({ children }) => {
   const [payments, setPayments] = useState(() =>
     load("payments", defaultPayments)
   );
-  const [customers, setCustomers] = useState(() =>
-    load("customers", defaultCustomers)
-  );
   const [arInvoices, setArInvoices] = useState(() =>
     load("arInvoices", defaultArInvoices)
   );
@@ -65,46 +68,6 @@ export const FinanceProvider = ({ children }) => {
     load("financeData", initialFinanceData)
   );
 
-  const [auditLogs, setAuditLogs] = useState(() =>
-    load("audit", [
-      {
-        timestamp: new Date().toISOString(),
-        action: "Finance System Started",
-        user: "System",
-        details: "Welcome to NextGen CRM + Finance!",
-      },
-    ])
-  );
-
-  /* --------------------------- CRM & LOYALTY STATE --------------------------- */
-  // These are loaded from sampleData (data.js) and kept in sync with other modules
-  const [leads, setLeads] = useState(() =>
-    load("leads", sampleData.leads || [])
-  );
-  const [supportTickets, setTickets] = useState(() =>
-    load("tickets", sampleData.supportTickets || [])
-  );
-
-  const [loyaltyPrograms, setLoyaltyPrograms] = useState(() =>
-    load("loyaltyPrograms", sampleData.loyaltyPrograms || [])
-  );
-  const [loyaltyRules, setLoyaltyRules] = useState(() =>
-    load("loyaltyRules", sampleData.loyaltyRules || [])
-  );
-  const [loyaltyLedger, setLoyaltyLedger] = useState(() =>
-    load("loyaltyLedger", sampleData.loyaltyLedger || [])
-  );
-  const [loyaltyTransactions, setLoyaltyTransactions] = useState(() =>
-    load("loyaltyTransactions", sampleData.loyaltyTransactions || [])
-  );
-  const [loyaltyRedemptions, setLoyaltyRedemptions] = useState(() =>
-    load("loyaltyRedemptions", sampleData.loyaltyRedemptions || [])
-  );
-
-  const [sales, setSales] = useState(() =>
-    load("sales", sampleData.sales || [])
-  );
-
   /* --------------------------- AUTO-SAVE TO LOCALSTORAGE --------------------------- */
   useEffect(() => {
     const saveAll = () => {
@@ -113,24 +76,12 @@ export const FinanceProvider = ({ children }) => {
       save("vendors", vendors);
       save("invoices", invoices);
       save("payments", payments);
-      save("customers", customers);
       save("arInvoices", arInvoices);
       save("receipts", receipts);
       save("budgets", budgets);
       save("costCenters", costCenters);
       save("assets", fixedAssets);
       save("financeData", financeData);
-      save("audit", auditLogs);
-
-      // CRM & Loyalty
-      save("leads", leads);
-      save("tickets", supportTickets);
-      save("sales", sales);
-      save("loyaltyPrograms", loyaltyPrograms);
-      save("loyaltyRules", loyaltyRules);
-      save("loyaltyLedger", loyaltyLedger);
-      save("loyaltyTransactions", loyaltyTransactions);
-      save("loyaltyRedemptions", loyaltyRedemptions);
     };
 
     saveAll();
@@ -140,22 +91,12 @@ export const FinanceProvider = ({ children }) => {
     vendors,
     invoices,
     payments,
-    customers,
     arInvoices,
     receipts,
     budgets,
     costCenters,
     fixedAssets,
     financeData,
-    auditLogs,
-    leads,
-    supportTickets,
-    sales,
-    loyaltyPrograms,
-    loyaltyRules,
-    loyaltyLedger,
-    loyaltyTransactions,
-    loyaltyRedemptions,
   ]);
 
   /* --------------------------- CURRENCY FORMATTER --------------------------- */
@@ -227,189 +168,17 @@ export const FinanceProvider = ({ children }) => {
       })
     );
 
-    // Audit log
-    logAudit(
-      "GL Entry",
-      `${description} | ${formatCurrency(
-        amount
-      )} | ${debitAccountName} → ${creditAccountName}`
-    );
+    // Audit log (via shared)
+    if (logAudit) {
+      logAudit(
+        "GL Entry",
+        `${description} | ${formatCurrency(
+          amount
+        )} | ${debitAccountName} → ${creditAccountName}`
+      );
+    }
 
     return newEntry;
-  };
-
-  /* --------------------------- AUDIT LOG HELPER --------------------------- */
-  const logAudit = (action, details, user = "You") => {
-    setAuditLogs((prev) => [
-      ...prev,
-      {
-        timestamp: new Date().toISOString(),
-        action,
-        user,
-        details,
-      },
-    ]);
-  };
-
-  /* --------------------------- LOYALTY POINTS ENGINE --------------------------- */
-  const awardLoyaltyPoints = (
-    customerId,
-    triggerType,
-    referenceId,
-    amount = 0
-  ) => {
-    const activeRules = loyaltyRules.filter(
-      (r) =>
-        r.trigger_type === triggerType &&
-        loyaltyPrograms.some((p) => p.id === r.program_id && p.is_active)
-    );
-
-    let totalPoints = 0;
-    const appliedRules = [];
-
-    for (const rule of activeRules) {
-      const condition = rule.condition_json || {};
-      if (
-        triggerType === "SALE" &&
-        condition.min_amount &&
-        amount < condition.min_amount
-      )
-        continue;
-      totalPoints += rule.points_awarded;
-      appliedRules.push(rule.id);
-    }
-
-    if (totalPoints === 0) return;
-
-    // Find or create ledger
-    let ledger = loyaltyLedger.find((l) => l.customer_id === customerId);
-    if (!ledger) {
-      const newLedger = {
-        id: `ledger-${Date.now()}`,
-        customer_id: customerId,
-        program_id: loyaltyPrograms[0]?.id,
-        points: 0,
-      };
-      ledger = newLedger;
-      setLoyaltyLedger((prev) => [...prev, newLedger]);
-    }
-
-    // Update points
-    setLoyaltyLedger((prev) =>
-      prev.map((l) =>
-        l.id === ledger.id ? { ...l, points: l.points + totalPoints } : l
-      )
-    );
-
-    // Record transaction
-    const txn = {
-      id: `txn-${Date.now()}`,
-      ledger_id: ledger.id,
-      type: "EARN",
-      points: totalPoints,
-      reference_id: referenceId,
-      notes: `${triggerType} → ${appliedRules.join(", ")}`,
-      created_at: new Date().toISOString(),
-    };
-    setLoyaltyTransactions((prev) => [...prev, txn]);
-
-    logAudit(
-      "Loyalty Points",
-      `${totalPoints} pts → ${
-        customers.find((c) => c.id === customerId)?.name
-      }`,
-      "Loyalty Engine"
-    );
-  };
-
-  /* --------------------------- SALES → GL + LOYALTY --------------------------- */
-  const recordSale = (saleData) => {
-    const {
-      customer_id,
-      amount,
-      items = [],
-      date = new Date().toISOString().split("T")[0],
-    } = saleData;
-    const saleId = `sale-${Date.now()}`;
-
-    // 1. Record in sales
-    const newSale = { id: saleId, customer_id, amount, items, date };
-    setSales((prev) => [...prev, newSale]);
-
-    // 2. Post to GL: Dr. Cash/Bank, Cr. Sales
-    postToGL("Cash", "Sales", amount, `Sale #${saleId}`, saleId, date);
-
-    // 3. Award Loyalty Points
-    awardLoyaltyPoints(customer_id, "SALE", saleId, amount);
-
-    logAudit(
-      "Sale Recorded",
-      `${formatCurrency(amount)} from ${
-        customers.find((c) => c.id === customer_id)?.name
-      }`
-    );
-    return newSale;
-  };
-
-  /* --------------------------- LEAD CONVERTED → POINTS --------------------------- */
-  const convertLead = (leadId, customerId) => {
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === leadId
-          ? { ...l, status: "CONVERTED", customer_id: customerId }
-          : l
-      )
-    );
-    awardLoyaltyPoints(customerId, "LEAD_CONVERTED", leadId);
-    logAudit("Lead Converted", `Lead #${leadId} → Customer #${customerId}`);
-  };
-
-  /* --------------------------- SUPPORT TICKET CLOSED → POINTS --------------------------- */
-  const closeSupportTicket = (ticketId, customerId) => {
-    setTickets((prev) =>
-      prev.map((t) => (t.id === ticketId ? { ...t, status: "CLOSED" } : t))
-    );
-    awardLoyaltyPoints(customerId, "TICKET_CLOSED", ticketId);
-    logAudit("Ticket Closed", `Ticket #${ticketId} resolved`);
-  };
-
-  /* --------------------------- REDEEM LOYALTY POINTS --------------------------- */
-  const redeemPoints = (customerId, redemptionId) => {
-    const redemption = loyaltyRedemptions.find((r) => r.id === redemptionId);
-    if (!redemption) return false;
-
-    const ledger = loyaltyLedger.find((l) => l.customer_id === customerId);
-    if (!ledger || ledger.points < redemption.points_cost) {
-      alert("Not enough points!");
-      return false;
-    }
-
-    // Deduct points
-    setLoyaltyLedger((prev) =>
-      prev.map((l) =>
-        l.id === ledger.id
-          ? { ...l, points: l.points - redemption.points_cost }
-          : l
-      )
-    );
-
-    // Log redemption
-    const txn = {
-      id: `redeem-${Date.now()}`,
-      ledger_id: ledger.id,
-      type: "REDEEM",
-      points: -redemption.points_cost,
-      reference_id: redemptionId,
-      notes: redemption.title,
-      created_at: new Date().toISOString(),
-    };
-    setLoyaltyTransactions((prev) => [...prev, txn]);
-
-    logAudit(
-      "Points Redeemed",
-      `${redemption.points_cost} pts → ${redemption.title}`
-    );
-    return true;
   };
 
   /* --------------------------- QUICK FINANCE ACTIONS --------------------------- */
@@ -436,7 +205,9 @@ export const FinanceProvider = ({ children }) => {
       invoice.id,
       date
     );
-    logAudit("AP Invoice", `₹${amount} from Vendor #${vendorId}`);
+    if (logAudit) {
+      logAudit("AP Invoice", `₹${amount} from Vendor #${vendorId}`);
+    }
     return invoice;
   };
 
@@ -455,7 +226,9 @@ export const FinanceProvider = ({ children }) => {
       payment.id,
       date
     );
-    logAudit("AP Payment", `₹${amount} for Invoice #${invoiceId}`);
+    if (logAudit) {
+      logAudit("AP Payment", `₹${amount} for Invoice #${invoiceId}`);
+    }
   };
 
   const receiveFromCustomer = (
@@ -480,7 +253,9 @@ export const FinanceProvider = ({ children }) => {
       receipt.id,
       date
     );
-    logAudit("AR Receipt", `₹${amount} from Customer #${customerId}`);
+    if (logAudit) {
+      logAudit("AR Receipt", `₹${amount} from Customer #${customerId}`);
+    }
   };
 
   /* --------------------------- ACCOUNT BALANCE HELPER --------------------------- */
@@ -526,8 +301,6 @@ export const FinanceProvider = ({ children }) => {
         setInvoices,
         payments,
         setPayments,
-        customers,
-        setCustomers,
         arInvoices,
         setArInvoices,
         receipts,
@@ -540,37 +313,16 @@ export const FinanceProvider = ({ children }) => {
         setFixedAssets,
         financeData,
         setFinanceData,
-        auditLogs,
-        setAuditLogs,
 
-        // CRM & Loyalty
-        leads,
-        setLeads,
-        supportTickets,
-        setTickets,
-        sales,
-        setSales,
-        loyaltyPrograms,
-        setLoyaltyPrograms,
-        loyaltyRules,
-        setLoyaltyRules,
-        loyaltyLedger,
-        setLoyaltyLedger,
-        loyaltyTransactions,
-        setLoyaltyTransactions,
-        loyaltyRedemptions,
-        setLoyaltyRedemptions,
+        // === SHARED ACCESS ===
+        customers: sharedCustomers ?? [],
+        setCustomers: setSharedCustomers,
 
         // === ACTIONS ===
         postToGL,
         createInvoice,
         recordPayment,
         receiveFromCustomer,
-        recordSale,
-        convertLead,
-        closeSupportTicket,
-        redeemPoints,
-        logAudit,
 
         // === HELPERS ===
         formatCurrency,
@@ -593,7 +345,7 @@ export const FinanceProvider = ({ children }) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                               USE FINANCE HOOK                               */
+/*                               USE FINANCE HOOK                             */
 /* -------------------------------------------------------------------------- */
 export const useFinance = () => {
   const context = useContext(FinanceContext);

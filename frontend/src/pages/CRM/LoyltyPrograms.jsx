@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
 
 /* -------------------------------------------------------------------------- */
@@ -39,7 +39,7 @@ export default function LoyaltyProgram() {
     // === QUICK ACCOUNTS ===
     cash,
     salesAccount,
-  } = useFinance();
+  } = useCrm();
 
   /* --------------------------- LOCAL UI STATE --------------------------- */
   const [activeTab, setActiveTab] = useState("dashboard"); // dashboard, sales, leads, support

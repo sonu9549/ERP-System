@@ -1,10 +1,10 @@
 // src/components/SalesEngagement.jsx
 import React, { useState } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format, isToday, isPast } from "date-fns";
 
 const SalesEngagement = () => {
-  const { leads = [], customers = [], setLeads, logAudit } = useFinance();
+  const { leads = [], customers = [], setLeads, logAudit } = useCrm();
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedLead, setSelectedLead] = useState(null);

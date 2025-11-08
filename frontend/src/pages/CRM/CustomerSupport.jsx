@@ -1,10 +1,10 @@
 // src/components/CustomerSupport.jsx
 import React, { useState } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
 
 const CustomerSupport = () => {
-  const { customers, tickets = [], setTickets, logAudit } = useFinance();
+  const { customers, tickets = [], setTickets, logAudit } = useCrm();
 
   const [activeTab, setActiveTab] = useState("tickets");
   const [newTicket, setNewTicket] = useState({

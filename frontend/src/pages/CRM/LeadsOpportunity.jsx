@@ -1,10 +1,10 @@
 // src/components/LeadsOpportunity.jsx
 import React, { useState } from "react";
-import { useFinance } from "../../context/FinanceContext";
+import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
 
 const LeadsOpportunity = () => {
-  const { customers, setCustomers, leads, setLeads, logAudit } = useFinance();
+  const { customers, setCustomers, leads, setLeads, logAudit } = useCrm();
 
   const [activeTab, setActiveTab] = useState("leads");
   const [form, setForm] = useState({

@@ -86,6 +86,7 @@ import ReportingAnalytics from "./pages/Production/ReportingAnalytics";
 import WasteManagement from "./pages/Production/WasteManagement";
 import MaterialConsumption from "./pages/Production/MaterialConsumption";
 import CostValuation from "./pages/Production/CostValuation";
+import { CrmProvider } from "./context/CRmContext";
 
 /* ------------------------------------------------------------------ */
 /* Layout (Navbar + Sidebar + Main) */
@@ -290,7 +291,9 @@ const AppRoutes = () => {
                     path="/crm/cm"
                     element={
                       <ProtectedRoute>
-                        <CustomerMaster />
+                        <CrmProvider>
+                          <CustomerMaster />
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -298,9 +301,9 @@ const AppRoutes = () => {
                     path="/crm/leads"
                     element={
                       <ProtectedRoute>
-                        <FinanceProvider>
+                        <CrmProvider>
                           <LeadsOpportunity />
-                        </FinanceProvider>
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -308,9 +311,9 @@ const AppRoutes = () => {
                     path="/crm/customer-support"
                     element={
                       <ProtectedRoute>
-                        <FinanceProvider>
+                        <CrmProvider>
                           <CustomerSupport />
-                        </FinanceProvider>
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -318,9 +321,9 @@ const AppRoutes = () => {
                     path="/crm/sef"
                     element={
                       <ProtectedRoute>
-                        <FinanceProvider>
+                        <CrmProvider>
                           <SalesEngagement />
-                        </FinanceProvider>
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -328,9 +331,9 @@ const AppRoutes = () => {
                     path="/crm/loyalty"
                     element={
                       <ProtectedRoute>
-                        <FinanceProvider>
+                        <CrmProvider>
                           <LoyaltyProgram />
-                        </FinanceProvider>
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -338,9 +341,9 @@ const AppRoutes = () => {
                     path="/crm/analytics"
                     element={
                       <ProtectedRoute>
-                        <FinanceProvider>
+                        <CrmProvider>
                           <CrmAnalytics />
-                        </FinanceProvider>
+                        </CrmProvider>
                       </ProtectedRoute>
                     }
                   />

@@ -1,34 +1,50 @@
-# app/api/v1/users.py
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
+from fastapi import APIRouter, Depends
+from sqlmodel import select
 from app.db.session import get_db
-from app.schemas.user_schema import UserCreate, UserOut, UserUpdate
-from app.crud.user_crud import create_user, list_users, get_user, update_user, assign_role_to_user
-from app.core.security import get_current_active_superadmin
+from app.models.user import User, UserCreate, UserUpdate
+from app.core.security import get_current_active_superadmin, get_password_hash
+from app.api.deps import get_current_user
 
-router = APIRouter(prefix="/api/v1/users", tags=["users"])
+router = APIRouter(prefix="/users", tags=["users"])
 
-@router.post("/", response_model=UserOut, dependencies=[Depends(get_current_active_superadmin)])
-def api_create_user(payload: UserCreate, db: Session = Depends(get_db)):
-    return create_user(db, payload)
+@router.get("/me")
+def list_users(db=Depends(get_db), user=Depends(get_current_active_superadmin)):
+    return db.exec(select(User)).all()
 
-@router.get("/", response_model=list[UserOut], dependencies=[Depends(get_current_active_superadmin)])
-def api_list_users(db: Session = Depends(get_db)):
-    return list_users(db)
+@router.post("/")
+def create_user(user_in: UserCreate, db=Depends(get_db), user=Depends(get_current_active_superadmin)):
+    existing = db.exec(select(User).where(User.email == user_in.email)).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists")
+    hashed = get_password_hash(user_in.password)
+    new_user = User(**user_in.dict(exclude={"password"}), hashed_password=hashed)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
 
-@router.patch("/{user_id}", response_model=UserOut, dependencies=[Depends(get_current_active_superadmin)])
-def api_update_user(user_id: int, payload: UserUpdate, db: Session = Depends(get_db)):
-    u = get_user(db, user_id)
-    if not u:
+@router.put("/{user_id}")
+def update_user(user_id: int, user_in: UserUpdate, db=Depends(get_db), user=Depends(get_current_active_superadmin)):
+    db_user = db.get(User, user_id)
+    if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    return update_user(db, u, payload)
+    update_data = user_in.dict(exclude_unset=True)
+    if "password" in update_data and update_data["password"]:
+        update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
+    for key, value in update_data.items():
+        setattr(db_user, key, value)
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
 
-@router.patch("/{user_id}/assign-role", response_model=UserOut, dependencies=[Depends(get_current_active_superadmin)])
-def api_assign_role(user_id: int, payload: dict, db: Session = Depends(get_db)):
-    role_id = payload.get("role_id")
-    if role_id is None:
-        raise HTTPException(status_code=400, detail="role_id required")
-    u = assign_role_to_user(db, user_id, role_id)
-    if not u:
+@router.delete("/{user_id}")
+def delete_user(user_id: int, db=Depends(get_db), user=Depends(get_current_active_superadmin)):
+    db_user = db.get(User, user_id)
+    if not db_user:
         raise HTTPException(status_code=404, detail="User not found")
-    return u
+    if db_user.id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete yourself")
+    db.delete(db_user)
+    db.commit()
+    return {"detail": "User deleted"}
