@@ -10,9 +10,6 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "NextGen LEDGER API"
     API_V1_STR: str = "/api/v1"
 
-    # ──────────────────────────────────────────────────────────────
-    # JWT
-    # ──────────────────────────────────────────────────────────────
     SECRET_KEY: str  # REQUIRED – no default
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -27,34 +24,26 @@ class Settings(BaseSettings):
     POSTGRES_PORT: int = 5432
 
     # Optional: Use async driver
-    DATABASE_DRIVER: Literal["asyncpg", "psycopg"] = "asyncpg"
+    DATABASE_DRIVER: Literal["psycopg"] 
 
     # ──────────────────────────────────────────────────────────────
     # Computed SQLAlchemy URL (SQLModel uses this name)
     # ──────────────────────────────────────────────────────────────
     @property
-    def SQLALCHEMY_DATABASE_URI(self) -> str:
-        driver = "postgresql+asyncpg" if self.DATABASE_DRIVER == "asyncpg" else "postgresql+psycopg"
+    def DATABASE_URL(self) -> str:
         return (
-            f"{driver}://"
+            f"postgresql+{self.DATABASE_DRIVER}://"
             f"{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}"
-            f"/{self.POSTGRES_DB}"
+            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
     class Config:
         env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False  # allows POSTGRES_USER or postgres_user
+        case_sensitive = False
 
-
-# ──────────────────────────────────────────────────────────────
-# Cached singleton
-# ──────────────────────────────────────────────────────────────
-@lru_cache()
 def get_settings() -> Settings:
     return Settings()
 
 
-# Global instance (import this everywhere)
 settings = get_settings()
+

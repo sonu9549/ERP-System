@@ -1,34 +1,60 @@
+# alembic/env.py
 import os
 import sys
 from pathlib import Path
-
-# Add project root to path
-BASE_DIR = Path(__file__).resolve().parent.parent
-sys.path.append(str(BASE_DIR))
-
 from logging.config import fileConfig
-from sqlalchemy import engine_from_config, pool  # <-- MUST BE HERE
+
+from sqlalchemy import pool
+from sqlalchemy import engine_from_config
 from alembic import context
 
-# Import your app
+# ------------------------------------------------------------------
+# 1. Add project root to PYTHONPATH
+# ------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+# ------------------------------------------------------------------
+# 2. Import SQLModel + ALL models
+# ------------------------------------------------------------------
+from sqlmodel import SQLModel                     # <-- Core
+from app.models.user import User                  # <-- Your table
+# from app.models.role import Role
+# from app.models.product import Product
+# ... import ALL SQLModel tables here ...
+
+# ------------------------------------------------------------------
+# 3. Import settings (DATABASE_URL_SYNC for Alembic)
+# ------------------------------------------------------------------
 from app.core.config import get_settings
-from app.db.session import SQLModel
-from app.models import *  # Import all models
-
-# Load settings
 settings = get_settings()
-target_metadata = SQLModel.metadata
 
-# === CONFIG ===
+# ------------------------------------------------------------------
+# 4. Alembic config
+# ------------------------------------------------------------------
 config = context.config
+
+# Logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# === MIGRATIONS ===
-def run_migrations_offline():
-    url = settings.DATABASE_URL
+# ------------------------------------------------------------------
+# 5. Override sqlalchemy.url with SYNC URL (psycopg)
+# ------------------------------------------------------------------
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
+# ------------------------------------------------------------------
+# 6. target_metadata – all tables
+# ------------------------------------------------------------------
+target_metadata = SQLModel.metadata
+
+# ------------------------------------------------------------------
+# 7. Offline mode
+# ------------------------------------------------------------------
+def run_migrations_offline() -> None:
     context.configure(
-        url=url,
+        url=settings.DATABASE_URL_SYNC,
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
@@ -36,9 +62,13 @@ def run_migrations_offline():
     with context.begin_transaction():
         context.run_migrations()
 
-def run_migrations_online():
+
+# ------------------------------------------------------------------
+# 8. Online mode (sync connection)
+# ------------------------------------------------------------------
+def run_migrations_online() -> None:
     connectable = engine_from_config(
-        {"sqlalchemy.url": settings.DATABASE_URL},
+        config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
@@ -53,6 +83,10 @@ def run_migrations_online():
         with context.begin_transaction():
             context.run_migrations()
 
+
+# ------------------------------------------------------------------
+# 9. Run
+# ------------------------------------------------------------------
 if context.is_offline_mode():
     run_migrations_offline()
 else:

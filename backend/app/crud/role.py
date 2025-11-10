@@ -1,4 +1,4 @@
-# app/crud/role_crud.py
+# app/crud/role.py
 from sqlalchemy.orm import Session
 from app.models.role import Role
 from app.schemas.role import RoleCreate
