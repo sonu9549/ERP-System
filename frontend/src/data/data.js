@@ -2,18 +2,22 @@
 // Sample mock data for development. In production, replace with API fetches.
 // This includes shared data like chart of accounts, vendors, invoices, etc.
 // Can be imported in components and context.
-
 export const sampleChartOfAccounts = [
-  { id: 1, code: "1001", name: "Cash", type: "Asset", balance: 50000 },
   {
-    id: 2,
-    code: "2001",
-    name: "Accounts Payable",
-    type: "Liability",
-    balance: 0,
+    id: "1", // ← STRING
+    code: "CASH",
+    name: "Cash",
+    type: "Asset",
+    opening: 50000,
   },
-  { id: 3, code: "5001", name: "Expenses", type: "Expense", balance: 0 },
-  // Add more as needed for other submodules
+  {
+    id: "2", // ← STRING
+    code: "BANK",
+    name: "Bank",
+    type: "Asset",
+    opening: 100000,
+  },
+  // ...
 ];
 
 export const sampleVendors = [
@@ -544,3 +548,147 @@ export const qualityData = {
     },
   ],
 };
+
+// src/data/bankData.js
+export const initialBankAccounts = [
+  {
+    id: "ba1",
+    name: "Primary Business Account",
+    bankName: "Chase Bank",
+    accountNumber: "****4832",
+    accountType: "checking",
+    balance: 125430.75,
+    currency: "USD",
+    status: "active",
+    openingDate: "2023-01-15",
+    creditLimit: 0,
+    currentBalance: 125430.75,
+    availableBalance: 125430.75,
+    routingNumber: "021000021",
+    isReconciled: true,
+    lastReconciled: "2024-01-15",
+  },
+  {
+    id: "ba2",
+    name: "Savings Account",
+    bankName: "Bank of America",
+    accountNumber: "****6712",
+    accountType: "savings",
+    balance: 75000.0,
+    currency: "USD",
+    status: "active",
+    openingDate: "2023-02-20",
+    creditLimit: 0,
+    currentBalance: 75000.0,
+    availableBalance: 75000.0,
+    routingNumber: "053000196",
+    isReconciled: true,
+    lastReconciled: "2024-01-10",
+  },
+  {
+    id: "ba3",
+    name: "Business Credit Card",
+    bankName: "American Express",
+    accountNumber: "****1895",
+    accountType: "credit",
+    balance: -2450.5,
+    currency: "USD",
+    status: "active",
+    openingDate: "2023-03-10",
+    creditLimit: 25000,
+    currentBalance: 2450.5,
+    availableBalance: 22549.5,
+    routingNumber: "N/A",
+    isReconciled: false,
+    lastReconciled: null,
+  },
+];
+
+export const initialBankTransactions = [
+  {
+    id: "t1",
+    accountId: "ba1",
+    date: "2024-01-15",
+    description: "Client Payment - ABC Corp",
+    reference: "INV-2024-001",
+    type: "deposit",
+    amount: 15000.0,
+    category: "revenue",
+    status: "completed",
+    balanceAfter: 125430.75,
+    isReconciled: true,
+  },
+  {
+    id: "t2",
+    accountId: "ba1",
+    date: "2024-01-14",
+    description: "Office Rent",
+    reference: "RENT-0124",
+    type: "withdrawal",
+    amount: 3500.0,
+    category: "expense",
+    status: "completed",
+    balanceAfter: 110430.75,
+    isReconciled: true,
+  },
+  {
+    id: "t3",
+    accountId: "ba3",
+    date: "2024-01-13",
+    description: "Software Subscription",
+    reference: "SUB-001",
+    type: "withdrawal",
+    amount: 299.0,
+    category: "expense",
+    status: "pending",
+    balanceAfter: 2450.5,
+    isReconciled: false,
+  },
+  {
+    id: "t4",
+    accountId: "ba2",
+    date: "2024-01-12",
+    description: "Interest Earned",
+    reference: "INT-0124",
+    type: "deposit",
+    amount: 125.5,
+    category: "interest",
+    status: "completed",
+    balanceAfter: 75000.0,
+    isReconciled: true,
+  },
+];
+
+export const initialBankDeposits = [
+  {
+    id: "bd1",
+    date: "2024-01-15",
+    amount: 15000.0,
+    description: "Customer Payments Batch",
+    reference: "DEP-2024-001",
+    status: "matched",
+    matchedReceipts: ["r1", "r2"],
+    accountId: "ba1",
+  },
+  {
+    id: "bd2",
+    date: "2024-01-10",
+    amount: 8500.0,
+    description: "Client Advance Payment",
+    reference: "DEP-2024-002",
+    status: "unmatched",
+    matchedReceipts: [],
+    accountId: "ba1",
+  },
+];
+
+export const initialCashFlowCategories = [
+  { id: "rev1", name: "Client Payments", type: "income" },
+  { id: "rev2", name: "Interest Income", type: "income" },
+  { id: "rev3", name: "Other Income", type: "income" },
+  { id: "exp1", name: "Salaries", type: "expense" },
+  { id: "exp2", name: "Office Rent", type: "expense" },
+  { id: "exp3", name: "Software Subscriptions", type: "expense" },
+  { id: "exp4", name: "Marketing", type: "expense" },
+  { id: "exp5", name: "Utilities", type: "expense" },
+];

@@ -11,7 +11,10 @@ from app.db.session import create_db_and_tables, get_db, engine, drop_db_and_tab
 from app.models.user import User
 from app.core.security import get_password_hash
 from app.constants.roles import ROLES
+from app.core.redis import init_redis,redis_client
 
+from app.api.v1.auth import limiter, custom_rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 # ----------------------------------------------------------------------
 # 1. OAuth2 scheme
@@ -30,6 +33,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# Custom error handler
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, custom_rate_limit_exceeded_handler)
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
@@ -47,6 +54,7 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # ----------------------------------------------------------------------
 @app.on_event("startup")
 async def on_startup() -> None:
+    await init_redis()
     await drop_db_and_tables()
     await create_db_and_tables()
 
@@ -98,6 +106,8 @@ async def on_startup() -> None:
 # ----------------------------------------------------------------------
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
+    if redis_client:
+        await redis_client.close()
     await engine.dispose()  # Properly close all connections
 
 

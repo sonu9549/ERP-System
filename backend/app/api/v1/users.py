@@ -8,6 +8,7 @@ from app.schemas.user import UserOut, UserCreate, UserUpdate
 from typing import List
 from sqlalchemy import select
 from passlib.context import CryptContext
+from app.constants.roles import ROLES
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -41,7 +42,7 @@ async def create_user(
         email=user_in.email,
         name=user_in.name,
         hashed_password=hashed_password,
-        role=user_in.role,
+        role=ROLES(user_in.role),
         is_superadmin=user_in.is_superadmin
     )
     db.add(new_user)
@@ -64,8 +65,12 @@ async def update_user(
     # Update fields
     if user_in.name is not None:
         user.name = user_in.name
+    if user_in.email is not None:
+        user.email = user_in.email
     if user_in.role is not None:
-        user.role = user_in.role
+        user.role = ROLES(user_in.role)  # ← Convert int to Enum
+    if user_in.password is not None:
+        user.hashed_password = pwd_context.hash(user_in.password)
     if user_in.is_superadmin is not None:
         user.is_superadmin = user_in.is_superadmin
 

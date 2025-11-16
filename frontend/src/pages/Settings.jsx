@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import { ROLES } from "../constants/roles";
-import { MODULE_ACCESS } from "../config/moduleAccessConfig";
+import api from "../api/axios";
 
 const roleNames = {
   [ROLES.SUPER_ADMIN]: "Super Admin",
@@ -29,6 +29,7 @@ const Settings = () => {
   const [showForm, setShowForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [formErrors, setFormErrors] = useState({});
+  const [loading, setLoading] = useState(true);
 
   // ACCESS CHECK
   if (!canAccessSettings) {
@@ -41,69 +42,39 @@ const Settings = () => {
     );
   }
 
-  // LOAD USERS
+  // LOAD USERS FROM BACKEND
   useEffect(() => {
-    const stored = localStorage.getItem("erp_users_v2");
-    if (stored) {
+    const loadUsers = async () => {
       try {
-        setUsers(JSON.parse(stored));
-      } catch (e) {
-        console.error("Failed to parse users", e);
+        setLoading(true);
+        const res = await api.get("/users");
+        setUsers(res.data);
+      } catch (err) {
+        console.error("Failed to load users:", err);
+        alert("Failed to load users. Check backend.");
+      } finally {
+        setLoading(false);
       }
-    } else {
-      // DEFAULT USERS (NO allowedPaths)
-      const defaultUsers = [
-        {
-          id: 1,
-          name: "Super Admin",
-          email: "admin@nextgen.com",
-          password: "admin123",
-          role: ROLES.SUPER_ADMIN,
-        },
-        {
-          id: 2,
-          name: "Sales Manager",
-          email: "sales@nextgen.com",
-          password: "sales123",
-          role: ROLES.SALES_MANAGER,
-        },
-        {
-          id: 3,
-          name: "Regular User",
-          email: "user@nextgen.com",
-          password: "user123",
-          role: ROLES.USER,
-        },
-      ];
-      setUsers(defaultUsers);
-      localStorage.setItem("erp_users_v2", JSON.stringify(defaultUsers));
-    }
+    };
+    loadUsers();
   }, []);
-
-  // SAVE USERS
-  useEffect(() => {
-    if (users.length > 0) {
-      localStorage.setItem("erp_users_v2", JSON.stringify(users));
-    }
-  }, [users]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(
       (u) =>
-        u.name.toLowerCase().includes(search.toLowerCase()) ||
-        u.email.toLowerCase().includes(search.toLowerCase())
+        u.name?.toLowerCase().includes(search.toLowerCase()) ||
+        u.email?.toLowerCase().includes(search.toLowerCase())
     );
   }, [users, search]);
 
   // VALIDATE
   const validateForm = () => {
     const errors = {};
-    if (!editingUser.name.trim()) errors.name = "Name is required";
-    if (!editingUser.email.trim()) errors.email = "Email is required";
+    if (!editingUser?.name?.trim()) errors.name = "Name is required";
+    if (!editingUser?.email?.trim()) errors.email = "Email is required";
     else if (!/\S+@\S+\.\S+/.test(editingUser.email))
       errors.email = "Invalid email";
 
-    // Password required only for new users
     if (!editingUser.id && !editingUser.password?.trim()) {
       errors.password = "Password is required for new users";
     }
@@ -112,28 +83,37 @@ const Settings = () => {
     return Object.keys(errors).length === 0;
   };
 
-  // SAVE USER
+  // SAVE USER (Backend API)
   const handleSave = async () => {
     if (!validateForm()) return;
     setSaving(true);
 
-    const userToSave = {
-      id: editingUser.id || Date.now(),
-      name: editingUser.name,
+    const payload = {
+      name: editingUser.name || "",
       email: editingUser.email,
       role: editingUser.role,
-      // Add password only if new or updated
-      ...(editingUser.password && { password: editingUser.password }),
+      password: editingUser.password,
     };
 
-    if (editingUser.id) {
-      setUsers(users.map((u) => (u.id === userToSave.id ? userToSave : u)));
-    } else {
-      setUsers([...users, userToSave]);
-    }
+    try {
+      if (editingUser.id) {
+        // UPDATE
+        await api.put(`/users/${editingUser.id}`, payload);
+      } else {
+        // CREATE
+        await api.post("/users", payload);
+      }
 
-    setSaving(false);
-    closeForm();
+      // RELOAD USERS
+      const res = await api.get("/users");
+      setUsers(res.data);
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || "Save failed";
+      alert(msg);
+    } finally {
+      setSaving(false);
+      closeForm();
+    }
   };
 
   const closeForm = () => {
@@ -142,15 +122,32 @@ const Settings = () => {
     setFormErrors({});
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (id === currentUser?.id) {
       alert("You cannot delete yourself!");
       return;
     }
-    if (window.confirm("Delete this user?")) {
+    if (!window.confirm("Delete this user?")) return;
+
+    try {
+      await api.delete(`/users/${id}`);
       setUsers(users.filter((u) => u.id !== id));
+    } catch (err) {
+      alert(err.response?.data?.detail || "Delete failed");
     }
   };
+
+  // LOADING STATE
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <div className="inline-flex items-center gap-2 text-blue-600">
+          <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+          Loading users...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -170,7 +167,7 @@ const Settings = () => {
               name: "",
               email: "",
               role: ROLES.USER,
-              password: "", // Initialize password
+              password: "",
             });
             setShowForm(true);
           }}
@@ -231,7 +228,7 @@ const Settings = () => {
               {filteredUsers.map((u) => (
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 font-medium text-gray-900">
-                    {u.name}
+                    {u.name || "-"}
                   </td>
                   <td className="px-6 py-4 text-gray-600">{u.email}</td>
                   <td className="px-6 py-4">
@@ -259,7 +256,13 @@ const Settings = () => {
                   <td className="px-6 py-4 text-center">
                     <button
                       onClick={() => {
-                        setEditingUser({ ...u, password: "" }); // Reset password on edit
+                        setEditingUser({
+                          ...u,
+                          name: u.name || "",
+                          email: u.email,
+                          role: u.role,
+                          password: "",
+                        });
                         setShowForm(true);
                       }}
                       className="text-blue-600 hover:text-blue-800 font-medium mr-3"
@@ -303,7 +306,7 @@ const Settings = () => {
                   </label>
                   <input
                     type="text"
-                    value={editingUser.name}
+                    value={editingUser.name || ""}
                     onChange={(e) =>
                       setEditingUser({ ...editingUser, name: e.target.value })
                     }
@@ -321,7 +324,7 @@ const Settings = () => {
                   </label>
                   <input
                     type="email"
-                    value={editingUser.email}
+                    value={editingUser.email || ""}
                     onChange={(e) =>
                       setEditingUser({ ...editingUser, email: e.target.value })
                     }
@@ -350,7 +353,7 @@ const Settings = () => {
                         password: e.target.value,
                       })
                     }
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-4 py-2.5 border border-gray conl-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter password for new user"
                   />
                   {formErrors.password && (
@@ -374,7 +377,7 @@ const Settings = () => {
                       role: Number(e.target.value),
                     });
                   }}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-4 py-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 >
                   <option value={ROLES.SUPER_ADMIN}>
                     Super Admin (All Access)

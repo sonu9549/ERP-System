@@ -1,4 +1,3 @@
-// src/components/LeadsOpportunity.jsx
 import React, { useState } from "react";
 import { useCrm } from "../../context/CRmContext";
 import { format } from "date-fns";
@@ -27,7 +26,7 @@ const LeadsOpportunity = () => {
     "Facebook",
     "Google Ads",
     "Referral",
-    "Cold Call",
+    "Instagram",
     "Event",
   ];
   const stages = [
@@ -122,19 +121,19 @@ const LeadsOpportunity = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-100 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-10 p-1">
+      <div className="max-w-9xl mx-auto">
         {/* HEADER */}
-        <div className="bg-white rounded-2xl shadow-xl p-6 mb-6">
+        <div className="bg-white  shadow-xl p-5 mb-1">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-4xl font-bold text-indigo-700">
+              <h1 className="text-3xl font-bold text-black-500">
                 Leads & Opportunities
               </h1>
               <p className="text-gray-600 mt-1">Convert strangers into ₹₹₹</p>
             </div>
             <div className="text-right">
-              <p className="text-3xl font-bold text-green-600">
+              <p className="text-3xl font-bold text-gray-500">
                 {leads.filter((l) => l.stage === "Won").length}
               </p>
               <p className="text-sm text-gray-600">Deals Won</p>
@@ -143,15 +142,15 @@ const LeadsOpportunity = () => {
         </div>
 
         {/* TABS */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden mb-6">
+        <div className="bg-white shadow-lg overflow-hidden mb-4">
           <div className="flex border-b">
             {["leads", "pipeline", "won"].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-8 py-4 font-bold text-lg capitalize ${
+                className={`px-5 py-2 font-bold capitalize ${
                   activeTab === tab
-                    ? "bg-indigo-600 text-white"
+                    ? "bg-yellow-600 text-white"
                     : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
@@ -171,14 +170,14 @@ const LeadsOpportunity = () => {
               placeholder="Search leads..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full p-4 border-2 border-indigo-300 rounded-xl text-lg mb-6"
+              className="w-full p-3 border-1  mb-7"
             />
 
             {activeTab === "leads" && (
               <>
                 {/* ADD LEAD FORM */}
-                <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border-2 border-indigo-200 mb-8">
-                  <h2 className="text-2xl font-bold mb-4 text-indigo-700">
+                <div className=" from-indigo-50 to-gray-50 p-6 rounded-2xl border-2 border-gray-200 mb-8">
+                  <h2 className="text-2xl font-bold mb-4 text-blue-800">
                     Add New Lead
                   </h2>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -257,7 +256,7 @@ const LeadsOpportunity = () => {
                   </div>
                   <button
                     onClick={saveLead}
-                    className="mt-6 px-10 py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl"
+                    className="mt-6 px-10 py-4 bg-gradient-to-r from-gray-500 to-gray-600 text-white font-bold rounded-xl shadow-lg hover:shadow-xl"
                   >
                     SAVE LEAD
                   </button>

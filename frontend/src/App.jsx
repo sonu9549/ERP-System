@@ -8,6 +8,11 @@ import {
 import { SalesProvider } from "./context/SalesContext";
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { QualityProvider } from "./context/QualityContext";
+import { CrmProvider } from "./context/CRmContext";
+import { ProcurementProvider } from "./context/ProcurementContext";
+import { ProductionProvider } from "./context/ProductionContext";
+import { FinanceProvider } from "./context/FinanceContext";
 import { Sidebar } from "./components/Sidebar";
 import { Navbar } from "./components/Navbar";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -18,8 +23,6 @@ import Dashboard from "./pages/Dashboard";
 
 import HR from "./pages/HR/HR";
 import Finance from "./pages/Finance/Finance";
-
-import Procurement from "./pages/Procurement/Procurement";
 import Settings from "./pages/Settings";
 import Multibranch from "./pages/Multibranch/Multibranch";
 
@@ -56,7 +59,7 @@ import WarehouseBins from "./pages/Inventory/Warehouse";
 import Products from "./pages/Inventory/Products";
 import Suppliers from "./pages/Inventory/Suppliers";
 import Reports from "./pages/Inventory/Reports";
-import { FinanceProvider } from "./context/FinanceContext";
+
 import BudgetsForecasting from "./pages/Finance/BudgetsForecasting";
 import CostAccounting from "./pages/Finance/CostAccounting";
 import FinanceSupplyChain from "./pages/Finance/Fscm";
@@ -67,7 +70,7 @@ import LoyaltyProgram from "./pages/CRM/LoyltyPrograms";
 import CrmAnalytics from "./pages/CRM/CrmAnalytics";
 import OnboardingModule from "./pages/HR/OnboardingModule";
 import { IncomingQualityControl } from "./pages/QualityManagement/IncomingQualityInspection";
-import { QualityProvider } from "./context/QualityContext";
+
 import { InProcessQualityControl } from "./pages/QualityManagement/InProcessQualityControl";
 import { FinalQualityControl } from "./pages/QualityManagement/FinalQualityControl";
 import { InspectionPlan } from "./pages/QualityManagement/InspectionPlan";
@@ -76,7 +79,7 @@ import { QualityCertificate } from "./pages/QualityManagement/QualityCertificate
 import SalesDashboard from "./pages/Sales/SalesDashboard";
 import WarehouseManagement from "./pages/Logistics/WarehouseMangement";
 import PlanningAndScheduling from "./pages/Production/PlanningAndScheduling";
-import { ProductionProvider } from "./context/ProductionContext";
+
 import BOMManagement from "./pages/Production/BOM";
 import WorkOrders from "./pages/Production/WorkOrders";
 import ShopFloor from "./pages/Production/ShopFloor";
@@ -86,7 +89,26 @@ import ReportingAnalytics from "./pages/Production/ReportingAnalytics";
 import WasteManagement from "./pages/Production/WasteManagement";
 import MaterialConsumption from "./pages/Production/MaterialConsumption";
 import CostValuation from "./pages/Production/CostValuation";
-import { CrmProvider } from "./context/CRmContext";
+
+import ProcurementOverview from "./pages/Procurement/ProcurementOverview";
+
+import PurchaseRequisition from "./pages/Procurement/PurchaseRequisition";
+import RFQModule from "./pages/Procurement/RFQModule";
+import VendorManagement from "./pages/Procurement/VendorManagement";
+import PurchaseOrderModule from "./pages/Procurement/PurchaseOrders";
+import GRNModule from "./pages/Procurement/GRNModule";
+import InvoiceMatchingModule from "./pages/Procurement/InvoiceMatching";
+import PaymentModule from "./pages/Procurement/PaymentModule";
+import BudgetReportsModule from "./pages/Procurement/BudgetReports";
+import SettingsModule from "./pages/Procurement/SettingsModule";
+import { InventoryProvider } from "./context/InventoryContext";
+import PlantMaintenanceModule from "./pages/PlantMaintenance/PlantMaintenance";
+import { PlantMaintenanceProvider } from "./context/PlantMaintenanceContext";
+import Pricing from "./pages/Sales/Pricing";
+import ATP from "./pages/Sales/ATP";
+import OutputDetermination from "./pages/Sales/OutputDetermination";
+import CreditManagement from "./pages/Sales/CreditManagement";
+import BankAccounts from "./pages/Finance/BankAccounts";
 
 /* ------------------------------------------------------------------ */
 /* Layout (Navbar + Sidebar + Main) */
@@ -138,9 +160,9 @@ const AppRoutes = () => {
                     path="/inventory/dashboard"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <InventoryDashboard />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -148,9 +170,9 @@ const AppRoutes = () => {
                     path="/inventory/stock"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <StockManagement />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -158,9 +180,9 @@ const AppRoutes = () => {
                     path="/inventory/st"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <StockTransactions />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -168,9 +190,9 @@ const AppRoutes = () => {
                     path="/inventory/purchase_manage"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <PurchaseManagement />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -178,9 +200,9 @@ const AppRoutes = () => {
                     path="/inventory/warehouse"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <WarehouseBins />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -188,9 +210,9 @@ const AppRoutes = () => {
                     path="/inventory/products"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <Products />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -198,9 +220,9 @@ const AppRoutes = () => {
                     path="/inventory/suppliers"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <Suppliers />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -208,9 +230,9 @@ const AppRoutes = () => {
                     path="/inventory/reports"
                     element={
                       <ProtectedRoute>
-                        <SalesProvider>
+                        <InventoryProvider>
                           <Reports />
-                        </SalesProvider>
+                        </InventoryProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -281,6 +303,46 @@ const AppRoutes = () => {
                       <ProtectedRoute>
                         <SalesProvider>
                           <Returns />
+                        </SalesProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/credit"
+                    element={
+                      <ProtectedRoute>
+                        <SalesProvider>
+                          <CreditManagement />
+                        </SalesProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/output"
+                    element={
+                      <ProtectedRoute>
+                        <SalesProvider>
+                          <OutputDetermination />
+                        </SalesProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/atp"
+                    element={
+                      <ProtectedRoute>
+                        <SalesProvider>
+                          <ATP />
+                        </SalesProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/sales/pricing"
+                    element={
+                      <ProtectedRoute>
+                        <SalesProvider>
+                          <Pricing />
                         </SalesProvider>
                       </ProtectedRoute>
                     }
@@ -455,6 +517,7 @@ const AppRoutes = () => {
                       </ProtectedRoute>
                     }
                   />
+
                   <Route
                     path="/finance/taxcomp"
                     element={
@@ -462,7 +525,6 @@ const AppRoutes = () => {
                         <FinanceProvider>
                           <TaxationCompliance />
                         </FinanceProvider>
-                        <TaxationCompliance />
                       </ProtectedRoute>
                     }
                   />
@@ -512,6 +574,16 @@ const AppRoutes = () => {
                       <ProtectedRoute>
                         <FinanceProvider>
                           <FinanceSupplyChain />
+                        </FinanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/finance/bank"
+                    element={
+                      <ProtectedRoute>
+                        <FinanceProvider>
+                          <BankAccounts />
                         </FinanceProvider>
                       </ProtectedRoute>
                     }
@@ -693,10 +765,102 @@ const AppRoutes = () => {
 
                   {/* Procurement */}
                   <Route
-                    path="/procurement"
+                    path="/procurement/overview"
                     element={
                       <ProtectedRoute>
-                        <Procurement />
+                        <ProcurementProvider>
+                          <ProcurementOverview />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/purchase-requisition"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <PurchaseRequisition />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/rfq"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <RFQModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/vm"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <VendorManagement />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/po"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <PurchaseOrderModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/grn"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <GRNModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/invoice"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <InvoiceMatchingModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/payment"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <PaymentModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/br"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <BudgetReportsModule />
+                        </ProcurementProvider>
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="/procurement/settings"
+                    element={
+                      <ProtectedRoute>
+                        <ProcurementProvider>
+                          <SettingsModule />
+                        </ProcurementProvider>
                       </ProtectedRoute>
                     }
                   />
@@ -718,6 +882,16 @@ const AppRoutes = () => {
                       </ProtectedRoute>
                     }
                   />
+                  <Route
+                    path="/plant"
+                    element={
+                      <ProtectedRoute>
+                        <PlantMaintenanceProvider>
+                          <PlantMaintenanceModule />
+                        </PlantMaintenanceProvider>
+                      </ProtectedRoute>
+                    }
+                  />
 
                   {/* Fallback Route */}
                   <Route path="*" element={<Navigate to="/" replace />} />
@@ -734,7 +908,22 @@ const AppRoutes = () => {
 const App = () => {
   return (
     <AuthProvider>
-      <AppRoutes />
+      {/* SAB PROVIDERS YAHAN ROOT ME */}
+      <InventoryProvider>
+        <ProcurementProvider>
+          <SalesProvider>
+            <FinanceProvider>
+              <QualityProvider>
+                <ProductionProvider>
+                  <CrmProvider>
+                    <AppRoutes />
+                  </CrmProvider>
+                </ProductionProvider>
+              </QualityProvider>
+            </FinanceProvider>
+          </SalesProvider>
+        </ProcurementProvider>
+      </InventoryProvider>
     </AuthProvider>
   );
 };

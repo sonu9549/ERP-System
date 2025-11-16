@@ -7,12 +7,16 @@ from app.models.user import User
 from app.core.config import settings
 from app.constants.roles import ROLES
 from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.redis import get_redis  
+from redis.asyncio import Redis
+import json
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/auth/login")
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)  # NEW: Inject Redis
 ):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -27,11 +31,24 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
+    # Cache Key
+    cache_key = f"user:{user_id}"
+
+    # Try Redis first
+    cached = await redis.get(cache_key)
+    if cached:
+        user_data = json.loads(cached)
+        return User(**user_data)  # Convert dict to User model
+
     # Correct async query
     result = await db.execute(select(User).where(User.id == user_id))
     user = result.scalars().first()
     if user is None:
         raise credentials_exception
+    
+    # Cache user data for 30 minutes
+    user_dict = user.dict()
+    await redis.setex(cache_key, 1800, json.dumps(user_dict))
     return user
 
 async def get_current_superadmin(

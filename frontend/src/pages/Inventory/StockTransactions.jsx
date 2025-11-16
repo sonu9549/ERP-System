@@ -1,4 +1,4 @@
-import { useSales } from "../../context/SalesContext";
+import { useInventory } from "../../context/InventoryContext";
 import {
   Package,
   ArrowDown,
@@ -9,8 +9,25 @@ import {
 import { useState } from "react";
 
 export default function StockTransactions() {
-  const { products, warehouses, bins, addStockTransaction, stockLedger } =
-    useSales();
+  const {
+    addStockTransaction,
+    stockLedger = [],
+    products = [],
+    warehouses = [],
+    bins = [],
+    loading = false,
+  } = useInventory();
+
+  const [search, setSearch] = useState("");
+
+  // === Safe Loading ===
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">Loading transactions...</div>
+      </div>
+    );
+  }
   const [type, setType] = useState("receipt");
   const [form, setForm] = useState({
     product_id: "",

@@ -1,5 +1,6 @@
 // src/context/AuthContext.jsx
 import React, { createContext, useContext, useState, useEffect } from "react";
+import api from "../api/axios";
 import { MODULE_ACCESS } from "../config/moduleAccessConfig";
 import { ROLES } from "../constants/roles";
 
@@ -9,100 +10,80 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // Auto-login on refresh
   useEffect(() => {
-    const stored = localStorage.getItem("current_user");
-    if (stored) {
+    const loadUser = async () => {
       try {
-        const parsed = JSON.parse(stored);
-        // allowedPaths hata do
-        const { allowedPaths, ...cleanUser } = parsed;
-        setUser(cleanUser);
-      } catch (e) {
-        console.error("Parse error:", e);
+        const res = await api.get("/users/me");
+        setUser(res.data);
+      } catch (err) {
+        localStorage.removeItem("access_token");
+      } finally {
+        setLoading(false);
       }
+    };
+
+    if (localStorage.getItem("access_token")) {
+      loadUser();
+    } else {
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem("current_user", JSON.stringify(user));
-    } else {
-      localStorage.removeItem("current_user");
+  const login = async (username, password) => {
+    try {
+      const formData = new URLSearchParams();
+      formData.append("username", username);
+      formData.append("password", password);
+
+      const response = await api.post("/auth/login", formData, {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      });
+
+      // Save token
+      localStorage.setItem("access_token", response.data.access_token);
+      const res = await api.get("/users/me");
+      setUser(res.data);
+
+      return { ...response.data, success: true };
+    } catch (err) {
+      const errorMessage =
+        err.response?.data?.detail ||
+        (err.response?.data && typeof err.response.data === "object"
+          ? Object.values(err.response.data)
+              .flat()
+              .map((e) => e.msg || e)
+              .join(", ")
+          : "Invalid email or password") ||
+        "Login failed. Please try again.";
+
+      return { success: false, error: errorMessage };
     }
-  }, [user]);
-
-  // ASYNC LOGIN
-  const login = async (email, password) => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        try {
-          let users = JSON.parse(localStorage.getItem("erp_users_v2") || "[]");
-
-          // Agar users nahi → default bana do (NO allowedPaths)
-          if (users.length === 0) {
-            const defaultUsers = [
-              {
-                id: 1,
-                name: "Super Admin",
-                email: "admin@nextgen.com",
-                password: "admin123",
-                role: ROLES.SUPER_ADMIN,
-              },
-              {
-                id: 2,
-                name: "Sales Manager",
-                email: "sales@nextgen.com",
-                password: "sales123",
-                role: ROLES.SALES_MANAGER,
-              },
-              {
-                id: 3,
-                name: "Regular User",
-                email: "user@nextgen.com",
-                password: "user123",
-                role: ROLES.USER,
-              },
-            ];
-            users = defaultUsers;
-            localStorage.setItem("erp_users_v2", JSON.stringify(defaultUsers));
-          }
-
-          const found = users.find(
-            (u) =>
-              u.email.toLowerCase() === email.toLowerCase().trim() &&
-              u.password === password
-          );
-
-          if (found) {
-            // allowedPaths HATA DO
-            const { allowedPaths, ...loggedInUser } = found;
-            setUser(loggedInUser);
-            resolve({ success: true });
-          } else {
-            resolve({ success: false, error: "Invalid email or password" });
-          }
-        } catch (e) {
-          console.error(e);
-          resolve({ success: false, error: "System error" });
-        }
-      }, 400);
-    });
   };
 
   const logout = () => {
+    localStorage.removeItem("access_token");
     setUser(null);
   };
 
   const canAccess = (path) => {
     if (!user) return false;
     if (user.role === ROLES.SUPER_ADMIN) return true;
-
-    const allowedRoles = MODULE_ACCESS[path];
-    return allowedRoles ? allowedRoles.includes(user.role) : false;
+    const allowed = MODULE_ACCESS[path];
+    return allowed ? allowed.includes(user.role) : false;
   };
 
   const canAccessSettings = canAccess("/settings");
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   return (
     <AuthContext.Provider
@@ -114,6 +95,7 @@ export const AuthProvider = ({ children }) => {
         canAccessSettings,
         ROLES,
         ALL_PATHS,
+        loading,
       }}
     >
       {children}

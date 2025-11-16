@@ -10,11 +10,10 @@ import {
   Clock,
   TrendingUp,
   Briefcase,
-  ChartCandlestick,
+  BarChart3,
   Warehouse,
   ShoppingCart,
   Truck,
-  BarChart3,
   ClipboardList,
   ClipboardCheck,
   Package,
@@ -24,7 +23,7 @@ import {
   Layers,
   Calculator,
   FileSpreadsheet,
-  FileBarChart,
+  FileBarChart2,
   LineChart,
   CheckSquare,
   RefreshCw,
@@ -40,6 +39,41 @@ import {
   Recycle,
   Database,
   Boxes,
+  Home,
+  Receipt,
+  ArrowLeftRight,
+  ScrollText,
+  Handshake,
+  FileCheck,
+  FileClock,
+  FileWarning,
+  PackageCheck,
+  PackageX,
+  PieChart,
+  FileInput,
+  FileOutput,
+  Scale,
+  ReceiptText,
+  Coins,
+  CreditCard,
+  BadgeCheck,
+  UserCheck,
+  Timer,
+  MessagesSquare,
+  PhoneCall,
+  Star,
+  ArrowDownUp,
+  PackageSearch,
+  FileSearch,
+  ClipboardPen,
+  Wrench,
+  Hammer,
+  ListChecks,
+  FileCog,
+  LandPlot,
+  Building,
+  GitBranch,
+  CalendarCheck,
 } from "lucide-react";
 
 // Reusable Icon Component
@@ -47,9 +81,9 @@ const MenuIcon = ({ icon: Icon, size = 16, className = "" }) => {
   return Icon ? <Icon size={size} className={className} /> : null;
 };
 
-// === MODULES (No minRole, No Hardcoding) ===
+// === UPDATED MODULES WITH VALID LUCIDE ICONS ===
 const modules = [
-  { path: "/", label: "Dashboard", icon: BarChart3 },
+  { path: "/", label: "Dashboard", icon: Home },
 
   // INVENTORY
   {
@@ -61,18 +95,18 @@ const modules = [
       {
         path: "/inventory/stock",
         label: "Stock Management",
-        icon: ChartCandlestick,
+        icon: PackageSearch,
       },
       { path: "/inventory/warehouse", label: "Warehouse", icon: Warehouse },
-      { path: "/inventory/products", label: "Products", icon: ShoppingCart },
-      { path: "/inventory/suppliers", label: "Suppliers", icon: Users },
-      { path: "/inventory/st", label: "Stock Transactions", icon: RefreshCw },
+      { path: "/inventory/products", label: "Products", icon: Boxes },
+      { path: "/inventory/suppliers", label: "Suppliers", icon: UserCheck },
+      { path: "/inventory/st", label: "Stock Transactions", icon: ArrowDownUp },
       {
         path: "/inventory/purchase_manage",
         label: "Purchase Management",
-        icon: ClipboardList,
+        icon: ShoppingCart,
       },
-      { path: "/inventory/reports", label: "Reports", icon: FileBarChart },
+      { path: "/inventory/reports", label: "Reports", icon: FileBarChart2 },
     ],
   },
 
@@ -82,13 +116,25 @@ const modules = [
     label: "Sales",
     icon: DollarSign,
     submodules: [
-      { path: "/sales", label: "Overview", icon: Users },
+      { path: "/sales", label: "Overview", icon: PieChart },
       { path: "/sales/cm", label: "Customers Master", icon: Users },
-      { path: "/sales/orders", label: "Sales Order", icon: ClipboardCheck },
+      { path: "/sales/orders", label: "Sales Order", icon: ClipboardPen },
+      {
+        path: "/sales/pricing",
+        label: "Pricing & Conditions",
+        icon: ClipboardPen,
+      },
+      { path: "/sales/atp", label: "ATP", icon: ClipboardPen },
+      { path: "/sales/credit", label: "Credit Management", icon: ClipboardPen },
       { path: "/sales/shipping", label: "Shipping & Delivery", icon: Truck },
-      { path: "/sales/invoice", label: "Billing & Invoicing", icon: FileText },
+      {
+        path: "/sales/invoice",
+        label: "Billing & Invoicing",
+        icon: ReceiptText,
+      },
+      { path: "/sales/returns", label: "Returns", icon: PackageX },
+      { path: "/sales/output", label: "Output Determination", icon: PackageX },
       { path: "/sales/analytics", label: "Sales Analytics", icon: LineChart },
-      { path: "/sales/returns", label: "Returns", icon: RefreshCw },
     ],
   },
 
@@ -96,7 +142,7 @@ const modules = [
   {
     id: "crm",
     label: "CRM",
-    icon: HeartHandshake,
+    icon: Handshake,
     submodules: [
       { path: "/crm/cm", label: "Customer Master", icon: Users },
       { path: "/crm/leads", label: "Leads & Opportunity", icon: Target },
@@ -108,9 +154,9 @@ const modules = [
       {
         path: "/crm/sef",
         label: "Sales Engagement & Follow-ups",
-        icon: Repeat,
+        icon: MessagesSquare,
       },
-      { path: "/crm/loyalty", label: "Loyalty Program", icon: HeartHandshake },
+      { path: "/crm/loyalty", label: "Loyalty Program", icon: Star },
       { path: "/crm/analytics", label: "CRM Analytics", icon: BarChart3 },
     ],
   },
@@ -125,10 +171,10 @@ const modules = [
       {
         path: "/hr/recruitment",
         label: "Recruitment & Onboarding",
-        icon: FileText,
+        icon: FileCheck,
       },
-      { path: "/hr/attendance", label: "Attendance & Time", icon: Clock },
-      { path: "/hr/payroll", label: "Payroll Management", icon: Briefcase },
+      { path: "/hr/attendance", label: "Attendance & Time", icon: Timer },
+      { path: "/hr/payroll", label: "Payroll Management", icon: CreditCard },
       {
         path: "/hr/performance",
         label: "Performance & Appraisal",
@@ -148,13 +194,14 @@ const modules = [
         label: "General Ledger",
         icon: FileSpreadsheet,
       },
-      { path: "/finance/ap", label: "Accounts Payable", icon: ClipboardList },
-      { path: "/finance/ar", label: "Accounts Receivable", icon: FileText },
+      { path: "/finance/ap", label: "Accounts Payable", icon: FileOutput },
+      { path: "/finance/ar", label: "Accounts Receivable", icon: FileInput },
       {
         path: "/finance/fam",
         label: "Fixed Assets Management",
-        icon: Building2,
+        icon: Building,
       },
+      { path: "/finance/bank", label: "Bank & Cash Management" },
       {
         path: "/finance/bf",
         label: "Budgeting and Forecasting",
@@ -163,15 +210,22 @@ const modules = [
       {
         path: "/finance/co",
         label: "Cost Accounting/Controlling",
-        icon: Calculator,
+        icon: Scale,
       },
-      { path: "/finance/fscm", label: "Financial Supply Chain", icon: Boxes },
+      {
+        path: "/finance/fscm",
+        label: "Financial Supply Chain",
+        icon: GitBranch,
+      },
       {
         path: "/finance/taxcomp",
         label: "Taxation & Compliance",
         icon: ShieldCheck,
       },
-      { path: "/finance/reports", label: "Reports", icon: FileBarChart },
+      { path: "/finance/reports", label: "Reports", icon: FileBarChart2 },
+      { path: "/finance/consolidation", label: "Financial Consolidation" },
+      { path: "/finance/cost-center", label: "Cost Center/Profit Center" },
+      { path: "/finance/product-costing", label: "Material Ledger" },
     ],
   },
 
@@ -179,18 +233,18 @@ const modules = [
   {
     id: "quality",
     label: "Quality Management",
-    icon: CheckSquare,
+    icon: BadgeCheck,
     submodules: [
       {
         path: "/quality/iqc",
         label: "Incoming Quality Control",
-        icon: ClipboardCheck,
+        icon: PackageCheck,
       },
       { path: "/quality/ipqc", label: "IPQC", icon: ClipboardList },
-      { path: "/quality/fqc", label: "FQC", icon: FileText },
-      { path: "/quality/ip", label: "Inspection Plan", icon: FolderTree },
-      { path: "/quality/ncm", label: "NCM", icon: AlertTriangle },
-      { path: "/quality/qc", label: "Quality Certificates", icon: ShieldCheck },
+      { path: "/quality/fqc", label: "FQC", icon: FileCheck },
+      { path: "/quality/ip", label: "Inspection Plan", icon: ScrollText },
+      { path: "/quality/ncm", label: "NCM", icon: FileWarning },
+      { path: "/quality/qc", label: "Quality Certificates", icon: BadgeCheck },
     ],
   },
 
@@ -213,12 +267,12 @@ const modules = [
       {
         path: "/logistics/cross-docking",
         label: "Cross-Docking & Transfer",
-        icon: RefreshCw,
+        icon: ArrowLeftRight,
       },
       {
         path: "/logistics/packaghandling",
         label: "Packaging & Handling",
-        icon: Boxes,
+        icon: Package,
       },
     ],
   },
@@ -232,33 +286,29 @@ const modules = [
       {
         path: "/production/ps",
         label: "Planning/Scheduling",
-        icon: ClipboardList,
-      },
-      { path: "/production/bom", label: "Bill of Materials", icon: Layers },
-      { path: "/production/wo", label: "Work Orders", icon: Layers },
-      { path: "/production/qc", label: "Quality Control", icon: Layers },
-      { path: "/production/sfm", label: "Shop Floor Management", icon: Layers },
-      { path: "/production/im", label: "Inventory Materials ", icon: Database },
+        icon: CalendarCheck,
+      }, // Fixed: Valid icon
+      { path: "/production/bom", label: "Bill of Materials", icon: ListChecks },
+      { path: "/production/wo", label: "Work Orders", icon: ClipboardPen },
+      { path: "/production/qc", label: "Quality Control", icon: BadgeCheck },
+      { path: "/production/sfm", label: "Shop Floor Management", icon: Wrench },
+      { path: "/production/im", label: "Inventory Materials", icon: Database },
       {
         path: "/production/mct",
         label: "Material Consumption",
-        icon: ClipboardCheck,
+        icon: ArrowDownUp,
       },
       { path: "/production/wm", label: "Wastage Management", icon: Recycle },
       {
         path: "/production/po",
         label: "Production Output & Yield",
-        icon: FileSpreadsheet,
+        icon: FileOutput,
       },
-      {
-        path: "/production/cv",
-        label: "Costing & Valuation",
-        icon: Calculator,
-      },
+      { path: "/production/cv", label: "Costing & Valuation", icon: Coins },
       {
         path: "/production/reporting",
-        label: "Reporting/Analytics ",
-        icon: Calculator,
+        label: "Reporting/Analytics",
+        icon: FileBarChart2,
       },
     ],
   },
@@ -269,40 +319,40 @@ const modules = [
     label: "Procurement",
     icon: ShoppingCart,
     submodules: [
+      { path: "/procurement/overview", label: "Overview", icon: PieChart },
       {
         path: "/procurement/purchase-requisition",
         label: "Purchase Requisition",
-        icon: ClipboardList,
+        icon: FileClock,
       },
-      { path: "/procurement/rq", label: "Request Quotation", icon: Mail },
+      { path: "/procurement/rfq", label: "RFQ & Quotation", icon: Mail },
+      { path: "/procurement/vm", label: "Vendor Management", icon: UserCheck },
       { path: "/procurement/po", label: "Purchase Orders", icon: FileText },
-      { path: "/procurement/grn", label: "GRN", icon: ClipboardCheck },
-      { path: "/procurement/pr", label: "Purchase Return", icon: RefreshCw },
+      { path: "/procurement/grn", label: "GRN", icon: PackageCheck },
+      { path: "/procurement/invoice", label: "Invoice", icon: Receipt },
+      { path: "/procurement/payment", label: "Payment", icon: CreditCard },
+      { path: "/procurement/br", label: "Budget & Reports", icon: BarChart3 },
+      { path: "/procurement/settings", label: "Settings", icon: Settings },
+      { path: "/procurement/pr", label: "Purchase Return", icon: PackageX },
       {
         path: "/procurement/vrec",
         label: "Vendor Reconciliation",
-        icon: HeartHandshake,
-      },
-      {
-        path: "/procurement/pa",
-        label: "Procurement Analytics",
-        icon: BarChart3,
+        icon: Handshake,
       },
     ],
   },
 
   // SINGLE LINKS
-  { path: "/multibranch", label: "Multibranch", icon: Building2 },
-  { path: "/plant", label: "Plant Maintenance", icon: Factory },
+  { path: "/multibranch", label: "Multibranch", icon: GitBranch },
+  { path: "/plant", label: "Plant Maintenance", icon: Hammer },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
 
 export const Sidebar = () => {
-  const { canAccess } = useAuth(); // Must have user.role
+  const { canAccess } = useAuth();
   const location = useLocation();
   const [openMenus, setOpenMenus] = useState({});
 
-  // === FILTER VISIBLE MODULES ===
   const visible = useMemo(() => {
     return modules
       .map((module) => {

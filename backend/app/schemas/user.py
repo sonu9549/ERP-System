@@ -17,8 +17,10 @@ class UserBase(BaseModel):
 # 2. Create user (incoming data)
 # ------------------------------------------------------------------
 class UserCreate(UserBase):
+    email: EmailStr
+    name: Optional[str] = None
     password: str
-    role: ROLES  # Use your enum
+    role: int  # ← int allow kar
     is_superadmin: bool = False
 
     class Config:
@@ -30,9 +32,9 @@ class UserCreate(UserBase):
 # ------------------------------------------------------------------
 class UserOut(UserBase):
     id: int
-    email: str
+    email: EmailStr
     name: Optional[str] = None
-    role: ROLES          # <-- ADD THIS
+    role: ROLES          
     is_active: bool
     is_superadmin: bool
 
@@ -46,7 +48,7 @@ class UserOut(UserBase):
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     name: Optional[str] = None
-    role: Optional[ROLES] = None
+    role: Optional[int] = None
     is_active: Optional[bool] = None
     is_superadmin: Optional[bool] = None
     password: Optional[str] = None  # For password change

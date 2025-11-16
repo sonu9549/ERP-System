@@ -1,10 +1,15 @@
 // src/pages/inventory/Products.jsx
-import { useSales } from "../../context/SalesContext";
+import { useInventory } from "../../context/InventoryContext";
 import { Plus, Edit2, Trash2, AlertCircle } from "lucide-react";
 import { useState } from "react";
 
 export default function Products() {
-  const { products, setProducts, stockLedger } = useSales();
+  const {
+    products = [],
+    setProducts,
+    stockLedger,
+    loading = false,
+  } = useInventory();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({
@@ -18,6 +23,15 @@ export default function Products() {
     has_batch: false,
     has_serial: false,
   });
+
+  // === Safe Loading ===
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-lg text-gray-600">Loading products...</div>
+      </div>
+    );
+  }
 
   // Calculate current stock per product
   const getStock = (productId) => {

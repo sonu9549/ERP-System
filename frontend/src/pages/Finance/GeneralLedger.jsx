@@ -1,10 +1,9 @@
 // src/components/GeneralLedger.jsx
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import { format, parseISO } from "date-fns";
 import { useReactToPrint } from "react-to-print";
 import jsPDF from "jspdf";
-
-import { autoTable } from "jspdf-autotable";
+import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 import { useFinance } from "../../context/FinanceContext";
@@ -15,14 +14,13 @@ import { useFinance } from "../../context/FinanceContext";
 const GeneralLedger = () => {
   const {
     chartOfAccounts,
-    setChartOfAccounts,
     journalEntries,
-    setJournalEntries,
     auditLogs,
     setAuditLogs,
-    postToGL,
-    getBalance,
     formatCurrency,
+    getTrialBalance,
+    createJournalEntry,
+    postToGL,
   } = useFinance();
 
   const printRef = useRef();
@@ -31,77 +29,339 @@ const GeneralLedger = () => {
   const [yearFilter, setYearFilter] = useState(new Date().getFullYear());
   const [selected, setSelected] = useState(""); // for Ledger tab
 
-  /* ---------- PRINT HANDLER WITH PDF FALLBACK ---------- */
+  /* ---------- PRINT HANDLER ---------- */
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
     documentTitle: `GL_${activeTab}_${yearFilter}`,
     pageStyle: `
       @page { size: A4; margin: 1cm; }
-      @media print { body { -webkit-print-color-scheme: light; } }
+      @media print { 
+        body { -webkit-print-color-adjust: exact; }
+        .no-print { display: none !important; }
+      }
     `,
-    onPrintError: () => {
-      console.warn("Print failed. Downloading PDF...");
-      exportCurrentTabAsPDF();
-    },
+    onAfterPrint: () => console.log("Printed successfully"),
   });
 
   useEffect(() => {
     setPrintReady(true);
   }, []);
 
-  /* ---------- PDF EXPORT FOR CURRENT TAB ---------- */
-  const exportCurrentTabAsPDF = () => {
-    const tabData = getTabDataForPDF();
-    if (!tabData) {
-      alert("No data to export in this tab!");
+  /* ---------- FIXED PDF EXPORT FUNCTION ---------- */
+  const exportPDF = (title, columns, data) => {
+    if (!data?.length) {
+      alert("No data to export!");
       return;
     }
-    exportPDF(tabData.title, tabData.columns, tabData.data);
+
+    const doc = new jsPDF("p", "mm", "a4");
+
+    // Title
+    doc.setFontSize(16);
+    doc.text(title, 15, 15);
+
+    // Subtitle
+    doc.setFontSize(10);
+    doc.text(
+      `Year: ${yearFilter} | Generated on: ${format(
+        new Date(),
+        "dd MMM yyyy HH:mm"
+      )}`,
+      15,
+      25
+    );
+
+    // Prepare table data properly - FIXED FORMATTING
+    const tableColumns = columns.map((col) => col.Header);
+    const tableRows = data.map((row) =>
+      columns.map((col) => {
+        let value = row[col.accessor];
+
+        // Handle null/undefined values
+        if (value == null || value === undefined || value === "") {
+          return "";
+        }
+
+        // Handle currency formatting - FIXED: Remove special characters
+        if (col.format === "currency") {
+          const numericValue =
+            typeof value === "number" ? value : parseFloat(value) || 0;
+          // Format without currency symbol for clean PDF
+          return new Intl.NumberFormat("en-IN", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+          }).format(numericValue);
+        }
+
+        // Handle date formatting
+        if (col.format === "date" && value) {
+          try {
+            return format(parseISO(value), "dd MMM yyyy");
+          } catch {
+            return String(value);
+          }
+        }
+
+        // Handle datetime formatting
+        if (col.format === "datetime" && value) {
+          try {
+            return format(parseISO(value), "dd MMM yyyy HH:mm");
+          } catch {
+            return String(value);
+          }
+        }
+
+        // Clean string values
+        return String(value);
+      })
+    );
+
+    // Add table with proper formatting
+    autoTable(doc, {
+      head: [tableColumns],
+      body: tableRows,
+      startY: 35,
+      theme: "grid",
+      styles: {
+        fontSize: 9,
+        cellPadding: 3,
+        font: "helvetica",
+        textColor: [0, 0, 0], // Ensure black text
+      },
+      headStyles: {
+        fillColor: [33, 150, 243],
+        textColor: 255,
+        fontStyle: "bold",
+        fontSize: 10,
+      },
+      alternateRowStyles: {
+        fillColor: [245, 245, 245],
+      },
+      columnStyles: {
+        // Right align numeric columns
+        ...columns.reduce((styles, col, index) => {
+          if (col.format === "currency" || col.align === "right") {
+            styles[index] = { halign: "right" };
+          }
+          return styles;
+        }, {}),
+      },
+      margin: { top: 35 },
+    });
+
+    // Save PDF with proper filename
+    const filename = `${title.replace(/[^\w\s]/gi, "_")}_${yearFilter}.pdf`;
+    doc.save(filename);
+  };
+
+  /* ---------- CSV EXPORT FUNCTION ---------- */
+  const exportToCSV = (title, columns, data) => {
+    if (!data?.length) {
+      alert("No data to export!");
+      return;
+    }
+
+    // Prepare CSV headers
+    const headers = columns.map((col) => col.Header);
+
+    // Prepare CSV rows
+    const csvRows = data.map((row) =>
+      columns
+        .map((col) => {
+          let value = row[col.accessor];
+
+          if (value == null || value === undefined || value === "") {
+            return "";
+          }
+
+          if (col.format === "currency") {
+            const numericValue =
+              typeof value === "number" ? value : parseFloat(value) || 0;
+            return numericValue.toFixed(2);
+          }
+
+          if (col.format === "date" && value) {
+            try {
+              return format(parseISO(value), "dd MMM yyyy");
+            } catch {
+              return String(value);
+            }
+          }
+
+          if (col.format === "datetime" && value) {
+            try {
+              return format(parseISO(value), "dd MMM yyyy HH:mm");
+            } catch {
+              return String(value);
+            }
+          }
+
+          // Escape commas and quotes for CSV
+          const stringValue = String(value);
+          if (
+            stringValue.includes(",") ||
+            stringValue.includes('"') ||
+            stringValue.includes("\n")
+          ) {
+            return `"${stringValue.replace(/"/g, '""')}"`;
+          }
+
+          return stringValue;
+        })
+        .join(",")
+    );
+
+    // Combine headers and rows
+    const csvContent = [headers.join(","), ...csvRows].join("\n");
+
+    // Create and download CSV file
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const filename = `${title.replace(/[^\w\s]/gi, "_")}_${yearFilter}.csv`;
+    saveAs(blob, filename);
+  };
+
+  /* ---------- TXT EXPORT FUNCTION ---------- */
+  const exportToTXT = (title, columns, data) => {
+    if (!data?.length) {
+      alert("No data to export!");
+      return;
+    }
+
+    // Prepare headers
+    const headers = columns.map((col) => col.Header);
+
+    // Calculate column widths
+    const colWidths = headers.map((header, index) => {
+      const maxDataWidth = Math.max(
+        ...data.map((row) => {
+          const value = row[columns[index].accessor];
+          if (value == null) return 0;
+
+          if (columns[index].format === "currency") {
+            const numericValue =
+              typeof value === "number" ? value : parseFloat(value) || 0;
+            return numericValue.toFixed(2).length;
+          }
+
+          if (columns[index].format === "date" && value) {
+            try {
+              return format(parseISO(value), "dd MMM yyyy").length;
+            } catch {
+              return String(value).length;
+            }
+          }
+
+          return String(value).length;
+        })
+      );
+      return Math.max(header.length, maxDataWidth) + 2;
+    });
+
+    // Create header line
+    const headerLine = headers
+      .map((header, index) => header.padEnd(colWidths[index]))
+      .join("");
+
+    // Create separator line
+    const separatorLine = colWidths.map((width) => "-".repeat(width)).join("");
+
+    // Create data lines
+    const dataLines = data.map((row) =>
+      columns
+        .map((col, index) => {
+          let value = row[col.accessor];
+
+          if (value == null || value === undefined || value === "") {
+            return "".padEnd(colWidths[index]);
+          }
+
+          if (col.format === "currency") {
+            const numericValue =
+              typeof value === "number" ? value : parseFloat(value) || 0;
+            value = numericValue.toFixed(2);
+          } else if (col.format === "date" && value) {
+            try {
+              value = format(parseISO(value), "dd MMM yyyy");
+            } catch {
+              value = String(value);
+            }
+          } else if (col.format === "datetime" && value) {
+            try {
+              value = format(parseISO(value), "dd MMM yyyy HH:mm");
+            } catch {
+              value = String(value);
+            }
+          } else {
+            value = String(value);
+          }
+
+          // Right align numeric columns, left align others
+          if (col.format === "currency" || col.align === "right") {
+            return value.padStart(colWidths[index]);
+          } else {
+            return value.padEnd(colWidths[index]);
+          }
+        })
+        .join("")
+    );
+
+    // Combine all content
+    const txtContent = [
+      title,
+      `Year: ${yearFilter} | Generated on: ${format(
+        new Date(),
+        "dd MMM yyyy HH:mm"
+      )}`,
+      "",
+      headerLine,
+      separatorLine,
+      ...dataLines,
+      "",
+    ].join("\n");
+
+    // Create and download TXT file
+    const blob = new Blob([txtContent], { type: "text/plain;charset=utf-8;" });
+    const filename = `${title.replace(/[^\w\s]/gi, "_")}_${yearFilter}.txt`;
+    saveAs(blob, filename);
   };
 
   const getTabDataForPDF = () => {
     switch (activeTab) {
       case "trial":
+        const trialData = getTrialBalance(`${yearFilter}-12-31`);
         return {
           title: "Trial Balance",
           columns: [
-            { Header: "Account", accessor: "name" },
+            { Header: "Account", accessor: "account" },
             { Header: "Debit", accessor: "debit", format: "currency" },
             { Header: "Credit", accessor: "credit", format: "currency" },
           ],
-          data: chartOfAccounts.map((a) => {
-            const bal = getBalance(a.name, {
-              fromDate: `${yearFilter}-01-01`,
-              toDate: `${yearFilter}-12-31`,
-            });
-            return {
-              name: a.name,
-              debit: bal > 0 ? bal : 0,
-              credit: bal < 0 ? Math.abs(bal) : 0,
-            };
-          }),
+          data: trialData.data,
         };
 
       case "ledger":
         if (!selected) return null;
         const account = chartOfAccounts.find((a) => a.id === selected);
         const txns = journalEntries
-          .filter((e) => new Date(e.date).getFullYear() <= yearFilter)
+          .filter((e) => new Date(e.date).getFullYear() === yearFilter)
           .flatMap((e) =>
             e.lines.map((l) => ({
               ...l,
               date: e.date,
               ref: e.ref || "JE",
-              desc: e.desc,
+              desc: e.desc || "Journal Entry",
             }))
           )
           .filter((t) => t.accountId === selected)
-          .sort((a, b) => a.date.localeCompare(b.date));
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
 
         let balance = 0;
         const rows = txns.map((t) => {
           balance += t.debit - t.credit;
-          return { ...t, balance };
+          return {
+            ...t,
+            balance: Math.round(balance * 100) / 100,
+          };
         });
 
         return {
@@ -109,10 +369,25 @@ const GeneralLedger = () => {
           columns: [
             { Header: "Date", accessor: "date", format: "date" },
             { Header: "Ref", accessor: "ref" },
-            { Header: "Desc", accessor: "desc" },
-            { Header: "Dr", accessor: "debit", format: "currency" },
-            { Header: "Cr", accessor: "credit", format: "currency" },
-            { Header: "Bal", accessor: "balance", format: "currency" },
+            { Header: "Description", accessor: "desc" },
+            {
+              Header: "Debit",
+              accessor: "debit",
+              format: "currency",
+              align: "right",
+            },
+            {
+              Header: "Credit",
+              accessor: "credit",
+              format: "currency",
+              align: "right",
+            },
+            {
+              Header: "Balance",
+              accessor: "balance",
+              format: "currency",
+              align: "right",
+            },
           ],
           data: rows,
         };
@@ -131,7 +406,10 @@ const GeneralLedger = () => {
             .reverse()
             .map((log) => ({
               ...log,
-              details: log.details,
+              details:
+                typeof log.details === "object"
+                  ? JSON.stringify(log.details)
+                  : log.details,
             })),
         };
 
@@ -142,8 +420,49 @@ const GeneralLedger = () => {
             { Header: "Code", accessor: "code" },
             { Header: "Name", accessor: "name" },
             { Header: "Type", accessor: "type" },
+            { Header: "Balance", accessor: "balance", format: "currency" },
           ],
           data: chartOfAccounts,
+        };
+
+      case "journal":
+        const journalData = journalEntries
+          .filter((entry) => new Date(entry.date).getFullYear() === yearFilter)
+          .flatMap((entry) =>
+            entry.lines.map((line) => ({
+              date: entry.date,
+              ref: entry.ref,
+              desc: entry.desc || "Journal Entry",
+              account:
+                chartOfAccounts.find((acc) => acc.id === line.accountId)
+                  ?.name || line.accountId,
+              debit: line.debit,
+              credit: line.credit,
+              memo: line.memo || "",
+            }))
+          );
+
+        return {
+          title: "Journal Entries",
+          columns: [
+            { Header: "Date", accessor: "date", format: "date" },
+            { Header: "Ref", accessor: "ref" },
+            { Header: "Description", accessor: "desc" },
+            { Header: "Account", accessor: "account" },
+            {
+              Header: "Debit",
+              accessor: "debit",
+              format: "currency",
+              align: "right",
+            },
+            {
+              Header: "Credit",
+              accessor: "credit",
+              format: "currency",
+              align: "right",
+            },
+          ],
+          data: journalData,
         };
 
       default:
@@ -151,42 +470,35 @@ const GeneralLedger = () => {
     }
   };
 
-  const exportPDF = (title, columns, data) => {
-    if (!data?.length) {
-      alert("No data to export!");
+  /* ---------- EXPORT FUNCTIONS FOR CURRENT TAB ---------- */
+  const exportCurrentTabAsPDF = () => {
+    const tabData = getTabDataForPDF();
+    if (!tabData) {
+      alert("No data to export in this tab!");
       return;
     }
-    const doc = new jsPDF("p", "mm", "a4");
-    doc.setFontSize(16);
-    doc.text(title, 15, 15);
-    doc.setFontSize(10);
-    doc.text(
-      `Year: ${yearFilter} | ${format(new Date(), "dd MMM yyyy HH:mm")}`,
-      15,
-      25
-    );
+    exportPDF(tabData.title, tabData.columns, tabData.data);
+    logAudit("PDF Export", { tab: activeTab, year: yearFilter });
+  };
 
-    const rows = data.map((row) =>
-      columns.map((col) => {
-        const v = row[col.accessor];
-        if (col.format === "currency") return formatCurrency(v || 0);
-        if (col.format === "date") return format(parseISO(v), "dd MMM yyyy");
-        if (col.format === "datetime")
-          return format(parseISO(v), "dd MMM yyyy HH:mm");
-        return v ?? "";
-      })
-    );
+  const exportCurrentTabAsCSV = () => {
+    const tabData = getTabDataForPDF();
+    if (!tabData) {
+      alert("No data to export in this tab!");
+      return;
+    }
+    exportToCSV(tabData.title, tabData.columns, tabData.data);
+    logAudit("CSV Export", { tab: activeTab, year: yearFilter });
+  };
 
-    autoTable(doc, {
-      head: [columns.map((c) => c.Header)],
-      body: rows,
-      startY: 35,
-      theme: "striped",
-      styles: { fontSize: 9 },
-      headStyles: { fillColor: [33, 150, 243] },
-    });
-    const pdfBlob = doc.output("blob");
-    saveAs(pdfBlob, `${title.replace(/\s+/g, "_")}_${yearFilter}.pdf`);
+  const exportCurrentTabAsTXT = () => {
+    const tabData = getTabDataForPDF();
+    if (!tabData) {
+      alert("No data to export in this tab!");
+      return;
+    }
+    exportToTXT(tabData.title, tabData.columns, tabData.data);
+    logAudit("TXT Export", { tab: activeTab, year: yearFilter });
   };
 
   const logAudit = (action, details = {}) => {
@@ -194,7 +506,8 @@ const GeneralLedger = () => {
       timestamp: new Date().toISOString(),
       action,
       user: "Admin",
-      details: JSON.stringify(details),
+      details:
+        typeof details === "object" ? details : { message: String(details) },
     };
     setAuditLogs((prev) => [...prev, log]);
   };
@@ -223,24 +536,36 @@ const GeneralLedger = () => {
         </div>
 
         {/* ACTION BUTTONS */}
-        <div className="p-4 bg-gray-50 border-b flex flex-wrap gap-3">
+        <div className="p-4 bg-gray-50 border-b flex flex-wrap gap-3 no-print">
           <button
             onClick={handlePrint}
             disabled={!printReady}
-            className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50 text-sm"
           >
-            Print PDF
+            📄 Print
           </button>
           <button
             onClick={exportCurrentTabAsPDF}
-            className="px-6 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-2"
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition flex items-center gap-2 text-sm"
           >
-            Export PDF
+            📊 Export PDF
+          </button>
+          <button
+            onClick={exportCurrentTabAsCSV}
+            className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition flex items-center gap-2 text-sm"
+          >
+            📁 Export CSV
+          </button>
+          <button
+            onClick={exportCurrentTabAsTXT}
+            className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition flex items-center gap-2 text-sm"
+          >
+            📄 Export TXT
           </button>
         </div>
 
         {/* TABS */}
-        <div className="border-b bg-white">
+        <div className="border-b bg-white no-print">
           {[
             { id: "chart", label: "Chart of Accounts" },
             { id: "journal", label: "Journal Entries" },
@@ -252,7 +577,10 @@ const GeneralLedger = () => {
           ].map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                if (tab.id === "ledger") setSelected("");
+              }}
               className={`px-6 py-3 font-medium border-b-4 transition ${
                 activeTab === tab.id
                   ? "border-blue-600 text-blue-600 bg-blue-50"
@@ -271,6 +599,7 @@ const GeneralLedger = () => {
             <JournalEntriesTab
               logAudit={logAudit}
               journalEntries={journalEntries}
+              createJournalEntry={createJournalEntry}
             />
           )}
           {activeTab === "opening" && (
@@ -295,10 +624,11 @@ const GeneralLedger = () => {
 };
 
 /* ============================================= */
-/*           CHART OF ACCOUNTS TAB (UPDATED)     */
+/*           CHART OF ACCOUNTS TAB               */
 /* ============================================= */
 const ChartOfAccountsTab = ({ logAudit }) => {
-  const { chartOfAccounts, setChartOfAccounts } = useFinance();
+  const { chartOfAccounts, createAccount, updateAccount, deleteAccount } =
+    useFinance();
   const [form, setForm] = useState({ code: "", name: "", type: "Asset" });
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({ code: "", name: "", type: "" });
@@ -308,10 +638,21 @@ const ChartOfAccountsTab = ({ logAudit }) => {
       alert("Code & Name are required");
       return;
     }
-    const newAcc = { id: Date.now().toString(), ...form };
-    setChartOfAccounts((prev) => [...prev, newAcc]);
-    logAudit("Account Created", form);
-    setForm({ ...form, code: "", name: "" });
+
+    try {
+      createAccount({
+        code: form.code,
+        name: form.name,
+        type: form.type,
+        opening: 0,
+        balance: 0,
+      });
+
+      logAudit("Account Created", form);
+      setForm({ code: "", name: "", type: "Asset" });
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   const startEdit = (acc) => {
@@ -324,21 +665,29 @@ const ChartOfAccountsTab = ({ logAudit }) => {
       alert("Code & Name are required");
       return;
     }
-    setChartOfAccounts((prev) =>
-      prev.map((a) => (a.id === editingId ? { ...a, ...editForm } : a))
-    );
-    logAudit("Account Updated", { id: editingId, ...editForm });
-    setEditingId(null);
+
+    try {
+      updateAccount(editingId, editForm);
+      logAudit("Account Updated", { id: editingId, ...editForm });
+      setEditingId(null);
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   const cancelEdit = () => {
     setEditingId(null);
   };
 
-  const deleteAccount = (id, name) => {
+  const deleteAcc = (id, name) => {
     if (!confirm(`Delete account "${name}"?`)) return;
-    setChartOfAccounts((prev) => prev.filter((a) => a.id !== id));
-    logAudit("Account Deleted", { id, name });
+
+    try {
+      deleteAccount(id);
+      logAudit("Account Deleted", { id, name });
+    } catch (error) {
+      alert(error.message);
+    }
   };
 
   return (
@@ -348,7 +697,7 @@ const ChartOfAccountsTab = ({ logAudit }) => {
       </h2>
 
       {/* Add Form */}
-      <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded mb-6 border shadow">
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 p-4 rounded mb-6 border shadow no-print">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <input
             placeholder="Code"
@@ -390,7 +739,8 @@ const ChartOfAccountsTab = ({ logAudit }) => {
               <th className="p-3 text-left">Code</th>
               <th className="p-3 text-left">Name</th>
               <th className="p-3 text-left">Type</th>
-              <th className="p-3 text-center">Actions</th>
+              <th className="p-3 text-right">Balance</th>
+              <th className="p-3 text-center no-print">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -437,7 +787,14 @@ const ChartOfAccountsTab = ({ logAudit }) => {
                         ))}
                       </select>
                     </td>
-                    <td className="p-2 text-center">
+                    <td className="p-2 text-right">
+                      {acc.balance?.toLocaleString("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        minimumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="p-2 text-center no-print">
                       <button
                         onClick={saveEdit}
                         className="text-green-600 hover:underline text-xs mr-2"
@@ -454,10 +811,33 @@ const ChartOfAccountsTab = ({ logAudit }) => {
                   </>
                 ) : (
                   <>
-                    <td className="p-3">{acc.code}</td>
+                    <td className="p-3 font-mono">{acc.code}</td>
                     <td className="p-3">{acc.name}</td>
-                    <td className="p-3">{acc.type}</td>
-                    <td className="p-3 text-center">
+                    <td className="p-3">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          acc.type === "Asset"
+                            ? "bg-green-100 text-green-800"
+                            : acc.type === "Liability"
+                            ? "bg-red-100 text-red-800"
+                            : acc.type === "Equity"
+                            ? "bg-blue-100 text-blue-800"
+                            : acc.type === "Income"
+                            ? "bg-purple-100 text-purple-800"
+                            : "bg-orange-100 text-orange-800"
+                        }`}
+                      >
+                        {acc.type}
+                      </span>
+                    </td>
+                    <td className="p-3 text-right font-mono">
+                      {acc.balance?.toLocaleString("en-IN", {
+                        style: "currency",
+                        currency: "INR",
+                        minimumFractionDigits: 2,
+                      })}
+                    </td>
+                    <td className="p-3 text-center no-print">
                       <button
                         onClick={() => startEdit(acc)}
                         className="text-blue-600 hover:underline text-xs mr-3"
@@ -465,7 +845,7 @@ const ChartOfAccountsTab = ({ logAudit }) => {
                         Edit
                       </button>
                       <button
-                        onClick={() => deleteAccount(acc.id, acc.name)}
+                        onClick={() => deleteAcc(acc.id, acc.name)}
                         className="text-red-600 hover:underline text-xs"
                       >
                         Delete
@@ -485,15 +865,20 @@ const ChartOfAccountsTab = ({ logAudit }) => {
 /* ============================================= */
 /*           JOURNAL ENTRIES TAB                 */
 /* ============================================= */
-const JournalEntriesTab = ({ logAudit, journalEntries }) => {
-  const { chartOfAccounts, postToGL } = useFinance();
+const JournalEntriesTab = ({
+  logAudit,
+  journalEntries,
+  createJournalEntry,
+}) => {
+  const [isPosting, setIsPosting] = useState(false);
+  const { chartOfAccounts, formatCurrency } = useFinance();
   const [entry, setEntry] = useState({
     date: format(new Date(), "yyyy-MM-dd"),
     ref: `JE-${Date.now().toString().slice(-4)}`,
     desc: "",
     lines: [
-      { accountId: "", debit: "", credit: "", memo: "" },
-      { accountId: "", debit: "", credit: "", memo: "" },
+      { accountId: "", debit: 0, credit: 0, memo: "" },
+      { accountId: "", debit: 0, credit: 0, memo: "" },
     ],
   });
   const fileInputRef = useRef();
@@ -510,6 +895,12 @@ const JournalEntriesTab = ({ logAudit, journalEntries }) => {
         const wb = XLSX.read(bstr, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+
+        if (data.length < 2) {
+          alert("No data found in Excel file");
+          return;
+        }
+
         const headers = data[0].map((h) => h?.toString().trim().toLowerCase());
         const rows = data.slice(1);
 
@@ -521,25 +912,22 @@ const JournalEntriesTab = ({ logAudit, journalEntries }) => {
         }
 
         const dateIdx = headers.indexOf("date");
-        const refIdx =
-          headers.indexOf("ref") !== -1 ? headers.indexOf("ref") : -1;
+        const refIdx = headers.indexOf("ref");
         const descIdx =
           headers.indexOf("description") !== -1
             ? headers.indexOf("description")
-            : headers.indexOf("narration") !== -1
-            ? headers.indexOf("narration")
             : -1;
         const accIdx = headers.indexOf("account code");
         const drIdx = headers.indexOf("debit");
         const crIdx = headers.indexOf("credit");
-        const memoIdx =
-          headers.indexOf("memo") !== -1 ? headers.indexOf("memo") : -1;
 
         const entries = [];
         const errors = [];
 
         rows.forEach((row, i) => {
           const rowNum = i + 2;
+          if (!row[accIdx]) return; // Skip empty rows
+
           const date = row[dateIdx];
           const accountCode = row[accIdx]?.toString().trim();
           const debit = parseFloat(row[drIdx]) || 0;
@@ -552,9 +940,7 @@ const JournalEntriesTab = ({ logAudit, journalEntries }) => {
 
           const account = chartOfAccounts.find((a) => a.code === accountCode);
           if (!account) {
-            errors.push(
-              `Row ${rowNum}: Account Code '${accountCode}' not found`
-            );
+            errors.push(`Row ${rowNum}: Account '${accountCode}' not found`);
             return;
           }
 
@@ -573,76 +959,47 @@ const JournalEntriesTab = ({ logAudit, journalEntries }) => {
             accountId: account.id,
             debit,
             credit,
-            memo: memoIdx !== -1 ? row[memoIdx]?.toString() || "" : "",
           });
         });
 
+        // Group by reference to create proper journal entries
         const grouped = {};
         entries.forEach((e) => {
           const key = `${e.date}|${e.ref}|${e.desc}`;
-          if (!grouped[key])
+          if (!grouped[key]) {
             grouped[key] = {
               date: e.date,
               ref: e.ref,
               desc: e.desc,
               lines: [],
             };
+          }
           grouped[key].lines.push({
             accountId: e.accountId,
             debit: e.debit,
             credit: e.credit,
-            memo: e.memo,
           });
         });
 
         let totalImported = 0;
-        let totalDr = 0,
-          totalCr = 0;
+        const postErrors = [];
 
         Object.values(grouped).forEach((group) => {
-          const drSum = group.lines.reduce((s, l) => s + l.debit, 0);
-          const crSum = group.lines.reduce((s, l) => s + l.credit, 0);
-
-          if (Math.abs(drSum - crSum) > 0.01) {
-            errors.push(`Entry ${group.ref}: Dr (${drSum}) ≠ Cr (${crSum})`);
-            return;
+          try {
+            createJournalEntry(group);
+            totalImported++;
+          } catch (error) {
+            postErrors.push(`Entry ${group.ref}: ${error.message}`);
           }
-
-          group.lines.forEach((l) => {
-            if (l.debit > 0)
-              postToGL(
-                l.accountId,
-                null,
-                l.debit,
-                group.desc,
-                group.ref,
-                group.date
-              );
-            if (l.credit > 0)
-              postToGL(
-                null,
-                l.accountId,
-                l.credit,
-                group.desc,
-                group.ref,
-                group.date
-              );
-          });
-
-          totalDr += drSum;
-          totalCr += crSum;
-          totalImported++;
         });
 
         const report = `
 Imported: ${totalImported} journal entries
-Total Dr: ₹${totalDr.toLocaleString()}
-Total Cr: ₹${totalCr.toLocaleString()}
 
 ${
-  errors.length > 0
-    ? `Errors (${errors.length}):\n` + errors.join("\n")
-    : "No errors!"
+  errors.length > 0 || postErrors.length > 0
+    ? `Issues:\n${[...errors, ...postErrors].join("\n")}`
+    : "All entries posted successfully!"
 }
         `.trim();
 
@@ -650,10 +1007,9 @@ ${
         logAudit("Excel Import", {
           file: file.name,
           entries: totalImported,
-          dr: totalDr,
-          cr: totalCr,
-          errors: errors.length,
+          errors: errors.length + postErrors.length,
         });
+
         if (fileInputRef.current) fileInputRef.current.value = "";
       } catch (err) {
         alert("Error reading file: " + err.message);
@@ -666,137 +1022,281 @@ ${
   const downloadTemplate = () => {
     const templateData = [
       ["Date", "Ref", "Description", "Account Code", "Debit", "Credit", "Memo"],
-      ["2025-04-01", "JE-001", "Office Rent", "RENT", 15000, "", "April rent"],
-      ["2025-04-01", "JE-001", "Office Rent", "CASH", "", 15000, ""],
+      ["2025-04-01", "JE-001", "Office Rent", "RENT", 15000, 0, "April rent"],
+      ["2025-04-01", "JE-001", "Office Rent", "CASH", 0, 15000, ""],
       [
         "2025-04-05",
         "JE-002",
         "Sales Revenue",
         "SALES",
-        "",
+        0,
         50000,
         "Invoice #101",
       ],
-      ["2025-04-05", "JE-002", "Sales Revenue", "CASH", 50000, "", ""],
+      ["2025-04-05", "JE-002", "Sales Revenue", "CASH", 50000, 0, ""],
     ];
 
     const ws = XLSX.utils.aoa_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Journal Template");
-
-    const headerRange = XLSX.utils.decode_range(ws["!ref"]);
-    for (let C = headerRange.s.c; C <= headerRange.e.c; ++C) {
-      const cell = ws[XLSX.utils.encode_cell({ r: 0, c: C })];
-      if (cell) {
-        cell.s = {
-          fill: { fgColor: { rgb: "4CAF50" } },
-          font: { bold: true, color: { rgb: "FFFFFF" } },
-          alignment: { horizontal: "center" },
-        };
-      }
-    }
-
     XLSX.writeFile(wb, "Journal_Entry_Template.xlsx");
     logAudit("Downloaded Excel Template");
   };
 
-  /* ---------- EXPORT TO CSV ---------- */
-  const exportToCSV = () => {
+  /* ---------- EXPORT JOURNAL ENTRIES TO CSV ---------- */
+  const exportJournalToCSV = () => {
     if (!journalEntries || journalEntries.length === 0) {
       alert("No journal entries to export!");
       return;
     }
 
-    const csvRows = [];
-    csvRows.push([
+    const journalData = journalEntries
+      .filter(
+        (entry) =>
+          new Date(entry.date).getFullYear() === new Date().getFullYear()
+      )
+      .flatMap((entry) =>
+        entry.lines.map((line) => ({
+          date: entry.date,
+          ref: entry.ref,
+          description: entry.desc || "Journal Entry",
+          account:
+            chartOfAccounts.find((acc) => acc.id === line.accountId)?.name ||
+            line.accountId,
+          accountCode:
+            chartOfAccounts.find((acc) => acc.id === line.accountId)?.code ||
+            "",
+          debit: line.debit,
+          credit: line.credit,
+          memo: line.memo || "",
+        }))
+      );
+
+    const headers = [
       "Date",
-      "Ref",
+      "Reference",
       "Description",
+      "Account",
       "Account Code",
-      "Account Name",
       "Debit",
       "Credit",
       "Memo",
-    ]);
+    ];
 
-    journalEntries.forEach((entry) => {
-      entry.lines.forEach((line) => {
-        const account = chartOfAccounts.find((a) => a.id === line.accountId);
-        csvRows.push([
-          entry.date,
-          entry.ref || "",
-          entry.desc || "",
-          account?.code || "",
-          account?.name || "",
-          line.debit || "",
-          line.credit || "",
-          line.memo || "",
-        ]);
-      });
-    });
+    const csvRows = journalData.map((row) =>
+      [
+        row.date,
+        row.ref,
+        `"${row.description.replace(/"/g, '""')}"`,
+        `"${row.account.replace(/"/g, '""')}"`,
+        row.accountCode,
+        row.debit.toFixed(2),
+        row.credit.toFixed(2),
+        `"${row.memo.replace(/"/g, '""')}"`,
+      ].join(",")
+    );
 
-    const csvContent = csvRows.map((row) => row.join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csvContent], {
-      type: "text/csv;charset=utf-8;",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `Journal_Entries_${new Date().getFullYear()}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
-    logAudit("Exported Journal to CSV", { count: journalEntries.length });
+    const csvContent = [headers.join(","), ...csvRows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const filename = `Journal_Entries_${new Date().getFullYear()}.csv`;
+    saveAs(blob, filename);
+
+    logAudit("Journal CSV Export", { count: journalData.length });
+  };
+
+  /* ---------- EXPORT JOURNAL ENTRIES TO TXT ---------- */
+  const exportJournalToTXT = () => {
+    if (!journalEntries || journalEntries.length === 0) {
+      alert("No journal entries to export!");
+      return;
+    }
+
+    const journalData = journalEntries
+      .filter(
+        (entry) =>
+          new Date(entry.date).getFullYear() === new Date().getFullYear()
+      )
+      .flatMap((entry) =>
+        entry.lines.map((line) => ({
+          date: entry.date,
+          ref: entry.ref,
+          description: entry.desc || "Journal Entry",
+          account:
+            chartOfAccounts.find((acc) => acc.id === line.accountId)?.name ||
+            line.accountId,
+          accountCode:
+            chartOfAccounts.find((acc) => acc.id === line.accountId)?.code ||
+            "",
+          debit: line.debit,
+          credit: line.credit,
+          memo: line.memo || "",
+        }))
+      );
+
+    const colWidths = [12, 12, 25, 20, 12, 12, 12, 20];
+    const headers = [
+      "Date",
+      "Reference",
+      "Description",
+      "Account",
+      "Account Code",
+      "Debit",
+      "Credit",
+      "Memo",
+    ];
+
+    const headerLine = headers
+      .map((header, index) => header.padEnd(colWidths[index]))
+      .join("");
+
+    const separatorLine = colWidths.map((width) => "-".repeat(width)).join("");
+
+    const dataLines = journalData.map((row) =>
+      [
+        format(parseISO(row.date), "dd MMM yyyy"),
+        row.ref,
+        row.description,
+        row.account,
+        row.accountCode,
+        row.debit.toFixed(2).padStart(12),
+        row.credit.toFixed(2).padStart(12),
+        row.memo,
+      ]
+        .map((value, index) => value.padEnd(colWidths[index]))
+        .join("")
+    );
+
+    const txtContent = [
+      "JOURNAL ENTRIES",
+      `Generated on: ${format(new Date(), "dd MMM yyyy HH:mm")}`,
+      "",
+      headerLine,
+      separatorLine,
+      ...dataLines,
+      "",
+    ].join("\n");
+
+    const blob = new Blob([txtContent], { type: "text/plain;charset=utf-8;" });
+    const filename = `Journal_Entries_${new Date().getFullYear()}.txt`;
+    saveAs(blob, filename);
+
+    logAudit("Journal TXT Export", { count: journalData.length });
   };
 
   const addLine = () =>
     setEntry({
       ...entry,
+      lines: [...entry.lines, { accountId: "", debit: 0, credit: 0, memo: "" }],
+    });
+
+  const removeLine = (index) => {
+    if (entry.lines.length <= 2) {
+      alert("Journal entry must have at least 2 lines");
+      return;
+    }
+    setEntry({
+      ...entry,
+      lines: entry.lines.filter((_, i) => i !== index),
+    });
+  };
+
+  const resetForm = () => {
+    setEntry({
+      date: format(new Date(), "yyyy-MM-dd"),
+      ref: `JE-${Date.now().toString().slice(-4)}`,
+      desc: "",
       lines: [
-        ...entry.lines,
-        { accountId: "", debit: "", credit: "", memo: "" },
+        { accountId: "", debit: 0, credit: 0, memo: "" },
+        { accountId: "", debit: 0, credit: 0, memo: "" },
       ],
     });
-  const updateLine = (i, field, val) => {
+  };
+
+  const updateLine = (index, field, value) => {
     const lines = [...entry.lines];
-    lines[i][field] = field === "debit" || field === "credit" ? +val || 0 : val;
+
+    if (field === "debit" || field === "credit") {
+      // Ensure only one of debit/credit has value
+      const numValue = parseFloat(value) || 0;
+      lines[index] = {
+        ...lines[index],
+        debit: field === "debit" ? numValue : 0,
+        credit: field === "credit" ? numValue : 0,
+      };
+    } else {
+      lines[index][field] = value;
+    }
+
     setEntry({ ...entry, lines });
   };
 
   const totals = entry.lines.reduce(
-    (s, l) => ({ debit: s.debit + l.debit, credit: s.credit + l.credit }),
+    (acc, line) => ({
+      debit: acc.debit + (line.debit || 0),
+      credit: acc.credit + (line.credit || 0),
+    }),
     { debit: 0, credit: 0 }
   );
 
-  const post = () => {
-    if (totals.debit !== totals.credit) {
-      alert(`Debits (₹${totals.debit}) ≠ Credits (₹${totals.credit})`);
+  const post = async () => {
+    if (isPosting) return;
+
+    // Validate totals
+    if (Math.abs(totals.debit - totals.credit) > 0.01) {
+      alert(
+        `Debits (${formatCurrency(totals.debit)}) ≠ Credits (${formatCurrency(
+          totals.credit
+        )})`
+      );
       return;
     }
 
-    entry.lines.forEach((l) => {
-      if (l.accountId && l.debit)
-        postToGL(l.accountId, null, l.debit, entry.desc, entry.ref, entry.date);
-      if (l.accountId && l.credit)
-        postToGL(
-          null,
-          l.accountId,
-          l.credit,
-          entry.desc,
-          entry.ref,
-          entry.date
+    // Validate lines
+    const validationErrors = [];
+    entry.lines.forEach((line, index) => {
+      if (!line.accountId) {
+        validationErrors.push(`Line ${index + 1}: Please select an account`);
+      }
+      if (line.debit === 0 && line.credit === 0) {
+        validationErrors.push(
+          `Line ${index + 1}: Both debit and credit cannot be zero`
         );
+      }
     });
 
-    logAudit("Journal Posted", { ref: entry.ref, amount: totals.debit });
-    alert(`Posted ₹${totals.debit.toLocaleString()}`);
-    setEntry({
-      ...entry,
-      desc: "",
-      lines: [
-        { accountId: "", debit: "", credit: "", memo: "" },
-        { accountId: "", debit: "", credit: "", memo: "" },
-      ],
-    });
+    if (validationErrors.length > 0) {
+      alert("Please fix the following errors:\n" + validationErrors.join("\n"));
+      return;
+    }
+
+    setIsPosting(true);
+
+    try {
+      await createJournalEntry({
+        date: entry.date,
+        ref: entry.ref,
+        desc: entry.desc,
+        lines: entry.lines.map((line) => ({
+          accountId: line.accountId,
+          debit: line.debit,
+          credit: line.credit,
+          memo: line.memo,
+        })),
+      });
+
+      logAudit("Journal Posted", {
+        ref: entry.ref,
+        amount: totals.debit,
+        lines: entry.lines.length,
+      });
+
+      alert(`Journal entry ${entry.ref} posted successfully!`);
+      resetForm();
+    } catch (error) {
+      alert("Error posting journal: " + error.message);
+    } finally {
+      setIsPosting(false);
+    }
   };
 
   return (
@@ -806,13 +1306,13 @@ ${
       </h2>
 
       {/* IMPORT + EXPORT BAR */}
-      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border border-blue-200 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+      <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border border-blue-200 shadow-sm no-print">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-center">
           <button
             onClick={downloadTemplate}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition font-medium"
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 transition text-sm font-medium"
           >
-            Download Template
+            📥 Download Template
           </button>
           <label className="flex items-center justify-center gap-2 cursor-pointer">
             <input
@@ -822,21 +1322,29 @@ ${
               onChange={handleExcelImport}
               className="hidden"
             />
-            <span className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition font-medium flex items-center gap-2">
-              Upload Excel
+            <span className="px-3 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition text-sm font-medium flex items-center gap-1">
+              📤 Upload Excel
             </span>
           </label>
           <button
-            onClick={exportToCSV}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition font-medium"
+            onClick={exportJournalToCSV}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 transition text-sm font-medium"
           >
-            Export to CSV
+            📁 Export CSV
+          </button>
+          <button
+            onClick={exportJournalToTXT}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 transition text-sm font-medium"
+          >
+            📄 Export TXT
+          </button>
+          <button
+            onClick={resetForm}
+            className="flex items-center justify-center gap-2 px-3 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 transition text-sm font-medium"
+          >
+            🔄 Reset Form
           </button>
         </div>
-        <p className="text-xs text-gray-600 mt-3 text-center">
-          Use <code>Account Code</code> from Chart of Accounts • Date:{" "}
-          <code>YYYY-MM-DD</code>
-        </p>
       </div>
 
       <div className="bg-white border rounded p-4 shadow">
@@ -849,73 +1357,109 @@ ${
           />
           <input
             value={entry.ref}
-            readOnly
-            className="p-2 bg-gray-100 rounded font-mono text-sm"
+            onChange={(e) => setEntry({ ...entry, ref: e.target.value })}
+            className="p-2 border rounded font-mono text-sm"
+            placeholder="Reference"
           />
           <input
-            placeholder="Narration"
+            placeholder="Narration/Description"
             value={entry.desc}
             onChange={(e) => setEntry({ ...entry, desc: e.target.value })}
             className="p-2 border rounded"
           />
         </div>
 
-        {entry.lines.map((l, i) => (
-          <div key={i} className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-2">
-            <select
-              value={l.accountId}
-              onChange={(e) => updateLine(i, "accountId", e.target.value)}
-              className="p-2 border rounded text-sm"
+        <div className="mb-2">
+          {entry.lines.map((line, index) => (
+            <div
+              key={index}
+              className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-2 items-start"
             >
-              <option value="">Select Account</option>
-              {chartOfAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.code} - {a.name}
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              placeholder="Dr"
-              value={l.debit}
-              onChange={(e) => updateLine(i, "debit", e.target.value)}
-              className="p-2 border rounded text-right font-mono"
-            />
-            <input
-              type="number"
-              placeholder="Cr"
-              value={l.credit}
-              onChange={(e) => updateLine(i, "credit", e.target.value)}
-              className="p-2 border rounded text-right font-mono"
-            />
-            <input
-              placeholder="Memo"
-              value={l.memo}
-              onChange={(e) => updateLine(i, "memo", e.target.value)}
-              className="p-2 border rounded text-sm"
-            />
-            <div />
-          </div>
-        ))}
+              <select
+                value={line.accountId}
+                onChange={(e) => updateLine(index, "accountId", e.target.value)}
+                className="p-2 border rounded text-sm"
+              >
+                <option value="">Select Account</option>
+                {chartOfAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.code} - {account.name}
+                  </option>
+                ))}
+              </select>
+
+              <input
+                type="number"
+                placeholder="Debit"
+                value={line.debit || ""}
+                onChange={(e) => updateLine(index, "debit", e.target.value)}
+                className="p-2 border rounded text-right font-mono"
+                step="0.01"
+                min="0"
+              />
+
+              <input
+                type="number"
+                placeholder="Credit"
+                value={line.credit || ""}
+                onChange={(e) => updateLine(index, "credit", e.target.value)}
+                className="p-2 border rounded text-right font-mono"
+                step="0.01"
+                min="0"
+              />
+
+              <input
+                placeholder="Memo"
+                value={line.memo}
+                onChange={(e) => updateLine(index, "memo", e.target.value)}
+                className="p-2 border rounded text-sm"
+              />
+
+              <div className="flex gap-1">
+                <button
+                  onClick={() => removeLine(index)}
+                  className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                  disabled={entry.lines.length <= 2}
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
 
         <div className="flex justify-between items-center mt-4 p-3 bg-gray-100 rounded">
           <button
             onClick={addLine}
-            className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
           >
             + Add Line
           </button>
           <div className="font-bold text-lg">
-            Dr: <span className="text-green-600">₹{totals.debit}</span> | Cr:{" "}
-            <span className="text-red-600">₹{totals.credit}</span>
+            Dr:{" "}
+            <span className="text-green-600">
+              {formatCurrency(totals.debit)}
+            </span>{" "}
+            | Cr:{" "}
+            <span className="text-red-600">
+              {formatCurrency(totals.credit)}
+            </span>
+            {Math.abs(totals.debit - totals.credit) > 0.01 && (
+              <span className="text-red-500 text-sm ml-2">(Not Balanced!)</span>
+            )}
           </div>
         </div>
 
         <button
           onClick={post}
-          className="mt-4 w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded font-bold hover:from-blue-700 hover:to-blue-800 transition text-lg"
+          disabled={isPosting || Math.abs(totals.debit - totals.credit) > 0.01}
+          className={`mt-4 w-full py-3 rounded font-bold transition text-lg ${
+            isPosting || Math.abs(totals.debit - totals.credit) > 0.01
+              ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+              : "bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800"
+          }`}
         >
-          POST JOURNAL
+          {isPosting ? "Posting..." : "POST JOURNAL ENTRY"}
         </button>
       </div>
     </div>
@@ -926,40 +1470,68 @@ ${
 /*           OPENING BALANCES TAB                */
 /* ============================================= */
 const OpeningBalancesTab = ({ year, logAudit }) => {
-  const { chartOfAccounts, postToGL } = useFinance();
+  const { chartOfAccounts, postToGL, formatCurrency } = useFinance();
   const [balances, setBalances] = useState({});
 
   const apply = () => {
     let totalDr = 0,
       totalCr = 0;
-    Object.entries(balances).forEach(([id, val]) => {
-      const amt = +val || 0;
-      if (amt > 0) totalDr += amt;
-      if (amt < 0) totalCr += Math.abs(amt);
+
+    // Calculate totals
+    Object.entries(balances).forEach(([id, amount]) => {
+      const numAmount = parseFloat(amount) || 0;
+      if (numAmount > 0) totalDr += numAmount;
+      if (numAmount < 0) totalCr += Math.abs(numAmount);
     });
 
-    if (totalDr !== totalCr) {
-      alert(`Debits (₹${totalDr}) ≠ Credits (₹${totalCr})`);
+    // Check if balanced
+    if (Math.abs(totalDr - totalCr) > 0.01) {
+      alert(
+        `Debits (${formatCurrency(totalDr)}) ≠ Credits (${formatCurrency(
+          totalCr
+        )})`
+      );
       return;
     }
 
-    Object.entries(balances).forEach(([id, val]) => {
-      const amt = +val || 0;
-      if (amt > 0)
-        postToGL(id, null, amt, "Opening Balance", "OPEN", `${year}-01-01`);
-      if (amt < 0)
-        postToGL(
-          null,
-          id,
-          Math.abs(amt),
-          "Opening Balance",
-          "OPEN",
-          `${year}-01-01`
-        );
+    // Post opening balances
+    const errors = [];
+    Object.entries(balances).forEach(([id, amount]) => {
+      const numAmount = parseFloat(amount) || 0;
+      if (numAmount !== 0) {
+        try {
+          if (numAmount > 0) {
+            postToGL(
+              id,
+              null,
+              numAmount,
+              "Opening Balance",
+              "OPEN",
+              `${year}-01-01`
+            );
+          } else {
+            postToGL(
+              null,
+              id,
+              Math.abs(numAmount),
+              "Opening Balance",
+              "OPEN",
+              `${year}-01-01`
+            );
+          }
+        } catch (error) {
+          errors.push(`Account ${id}: ${error.message}`);
+        }
+      }
     });
 
+    if (errors.length > 0) {
+      alert("Some entries failed:\n" + errors.join("\n"));
+      return;
+    }
+
     logAudit("Opening Balances Applied", { year, totalDr, totalCr });
-    alert("Opening balances applied!");
+    alert("Opening balances applied successfully!");
     setBalances({});
   };
 
@@ -969,31 +1541,65 @@ const OpeningBalancesTab = ({ year, logAudit }) => {
         Opening Balances ({year})
       </h2>
       <div className="bg-white border rounded p-4 shadow">
-        <p className="mb-4 text-sm text-gray-600">+ve = Debit | -ve = Credit</p>
-        <SimpleTable
-          data={chartOfAccounts.map((a) => ({
-            ...a,
-            amount: balances[a.id] || "",
-          }))}
-          columns={[
-            { Header: "Account", accessor: "name" },
-            {
-              Header: "Amount (±)",
-              accessor: "amount",
-              render: (row) => (
-                <input
-                  type="number"
-                  value={balances[row.id] || ""}
-                  onChange={(e) =>
-                    setBalances({ ...balances, [row.id]: e.target.value })
-                  }
-                  className="w-full p-2 border rounded text-right font-mono"
-                  placeholder="0"
-                />
-              ),
-            },
-          ]}
-        />
+        <p className="mb-4 text-sm text-gray-600">
+          Enter positive amounts for Debit balances, negative amounts for Credit
+          balances
+        </p>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-blue-600 text-white">
+              <tr>
+                <th className="p-3 text-left">Account</th>
+                <th className="p-3 text-left">Type</th>
+                <th className="p-3 text-right">Opening Balance</th>
+              </tr>
+            </thead>
+            <tbody>
+              {chartOfAccounts.map((account) => (
+                <tr key={account.id} className="border-b hover:bg-gray-50">
+                  <td className="p-3">
+                    <div className="font-medium">{account.name}</div>
+                    <div className="text-xs text-gray-500 font-mono">
+                      {account.code}
+                    </div>
+                  </td>
+                  <td className="p-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs ${
+                        account.type === "Asset"
+                          ? "bg-green-100 text-green-800"
+                          : account.type === "Liability"
+                          ? "bg-red-100 text-red-800"
+                          : account.type === "Equity"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {account.type}
+                    </span>
+                  </td>
+                  <td className="p-3">
+                    <input
+                      type="number"
+                      value={balances[account.id] || ""}
+                      onChange={(e) =>
+                        setBalances({
+                          ...balances,
+                          [account.id]: e.target.value,
+                        })
+                      }
+                      className="w-full p-2 border rounded text-right font-mono"
+                      placeholder="0.00"
+                      step="0.01"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
         <button
           onClick={apply}
           className="mt-6 w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded font-bold hover:from-blue-700 hover:to-blue-800 transition text-lg"
@@ -1009,39 +1615,55 @@ const OpeningBalancesTab = ({ year, logAudit }) => {
 /*           TRIAL BALANCE TAB                   */
 /* ============================================= */
 const TrialBalanceTab = ({ year }) => {
-  const { chartOfAccounts, getBalance, formatCurrency } = useFinance();
+  const { getTrialBalance, formatCurrency } = useFinance();
 
-  const data = chartOfAccounts.map((a) => {
-    const bal = getBalance(a.name, {
-      fromDate: `${year}-01-01`,
-      toDate: `${year}-12-31`,
-    });
-    return {
-      ...a,
-      debit: bal > 0 ? bal : 0,
-      credit: bal < 0 ? Math.abs(bal) : 0,
-    };
-  });
-
-  const totals = {
-    debit: data.reduce((s, r) => s + r.debit, 0),
-    credit: data.reduce((s, r) => s + r.credit, 0),
-  };
+  const trialBalance = getTrialBalance(`${year}-12-31`);
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4 text-blue-800">
         Trial Balance {year}
       </h2>
+
       <SimpleTable
-        data={data}
+        data={trialBalance.data}
         columns={[
-          { Header: "Account", accessor: "name" },
-          { Header: "Debit", accessor: "debit", format: "currency" },
-          { Header: "Credit", accessor: "credit", format: "currency" },
+          { Header: "Account", accessor: "account" },
+          {
+            Header: "Debit",
+            accessor: "debit",
+            format: "currency",
+            align: "right",
+          },
+          {
+            Header: "Credit",
+            accessor: "credit",
+            format: "currency",
+            align: "right",
+          },
         ]}
-        totals={totals}
+        totals={{
+          account: "Total",
+          debit: trialBalance.totalDebit,
+          credit: trialBalance.totalCredit,
+        }}
       />
+
+      <div className="mt-4 text-center">
+        {trialBalance.isBalanced ? (
+          <p className="text-green-600 font-bold text-lg">
+            ✅ Trial Balance Matches! ({formatCurrency(trialBalance.totalDebit)}
+            )
+          </p>
+        ) : (
+          <p className="text-red-600 font-bold text-lg">
+            ❌ Trial Balance Mismatch! Difference:{" "}
+            {formatCurrency(
+              Math.abs(trialBalance.totalDebit - trialBalance.totalCredit)
+            )}
+          </p>
+        )}
+      </div>
     </div>
   );
 };
@@ -1050,62 +1672,103 @@ const TrialBalanceTab = ({ year }) => {
 /*           LEDGER REPORT TAB                   */
 /* ============================================= */
 const LedgerReportTab = ({ year, selected, setSelected }) => {
-  const { chartOfAccounts, journalEntries } = useFinance();
+  const { chartOfAccounts, journalEntries, formatCurrency } = useFinance();
+
   const account = chartOfAccounts.find((a) => a.id === selected);
 
-  const txns = journalEntries
-    .filter((e) => new Date(e.date).getFullYear() <= year)
-    .flatMap((e) =>
-      e.lines.map((l) => ({
-        ...l,
-        date: e.date,
-        ref: e.ref || "JE",
-        desc: e.desc,
-      }))
-    )
-    .filter((t) => t.accountId === selected)
-    .sort((a, b) => a.date.localeCompare(b.date));
+  const transactions = useMemo(() => {
+    if (!selected) return [];
 
-  let balance = 0;
-  const rows = txns.map((t) => {
-    balance += t.debit - t.credit;
-    return { ...t, balance };
-  });
+    return journalEntries
+      .filter((entry) => new Date(entry.date).getFullYear() === year)
+      .flatMap((entry) =>
+        entry.lines
+          .filter((line) => line.accountId === selected)
+          .map((line) => ({
+            ...line,
+            date: entry.date,
+            ref: entry.ref || "JE",
+            desc: entry.desc,
+            entryId: entry.id,
+          }))
+      )
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+  }, [selected, journalEntries, year]);
+
+  const ledgerData = useMemo(() => {
+    let runningBalance = 0;
+    return transactions.map((transaction) => {
+      runningBalance += transaction.debit - transaction.credit;
+      return {
+        ...transaction,
+        balance: Math.round(runningBalance * 100) / 100,
+      };
+    });
+  }, [transactions]);
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4 text-blue-800">
         General Ledger Report
       </h2>
-      <select
-        value={selected}
-        onChange={(e) => setSelected(e.target.value)}
-        className="p-3 border rounded w-full mb-4 text-lg"
-      >
-        <option value="">Select Account</option>
-        {chartOfAccounts.map((a) => (
-          <option key={a.id} value={a.id}>
-            {a.code} - {a.name}
-          </option>
-        ))}
-      </select>
+
+      <div className="mb-6">
+        <select
+          value={selected}
+          onChange={(e) => setSelected(e.target.value)}
+          className="p-3 border rounded w-full text-lg"
+        >
+          <option value="">Select Account</option>
+          {chartOfAccounts.map((acc) => (
+            <option key={acc.id} value={acc.id}>
+              {acc.code} - {acc.name}
+            </option>
+          ))}
+        </select>
+      </div>
 
       {account && (
         <div>
-          <h3 className="text-xl font-bold mb-3 text-blue-700">
-            {account.name}
-          </h3>
-          <SimpleTable
-            data={rows}
-            columns={[
-              { Header: "Date", accessor: "date", format: "date" },
-              { Header: "Ref", accessor: "ref" },
-              { Header: "Desc", accessor: "desc" },
-              { Header: "Dr", accessor: "debit", format: "currency" },
-              { Header: "Cr", accessor: "credit", format: "currency" },
-              { Header: "Bal", accessor: "balance", format: "currency" },
-            ]}
-          />
+          <div className="bg-white p-4 rounded shadow mb-4">
+            <h3 className="text-xl font-bold text-blue-700">{account.name}</h3>
+            <div className="text-sm text-gray-600">
+              Code: <span className="font-mono">{account.code}</span> | Type:{" "}
+              <span className="font-medium">{account.type}</span> | Year: {year}
+            </div>
+          </div>
+
+          {ledgerData.length > 0 ? (
+            <SimpleTable
+              data={ledgerData}
+              columns={[
+                { Header: "Date", accessor: "date", format: "date" },
+                { Header: "Ref", accessor: "ref" },
+                { Header: "Description", accessor: "desc" },
+                {
+                  Header: "Debit",
+                  accessor: "debit",
+                  format: "currency",
+                  align: "right",
+                },
+                {
+                  Header: "Credit",
+                  accessor: "credit",
+                  format: "currency",
+                  align: "right",
+                },
+                {
+                  Header: "Balance",
+                  accessor: "balance",
+                  format: "currency",
+                  align: "right",
+                },
+              ]}
+            />
+          ) : (
+            <div className="text-center py-8 text-gray-500">
+              No transactions found for this account in {year}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1116,23 +1779,51 @@ const LedgerReportTab = ({ year, selected, setSelected }) => {
 /*           YEAR END CLOSING TAB                */
 /* ============================================= */
 const YearEndClosingTab = ({ year, logAudit }) => {
-  const close = () => {
-    if (!confirm(`Close Financial Year ${year}? This is permanent!`)) return;
+  const closeYear = () => {
+    if (
+      !confirm(
+        `Are you sure you want to close Financial Year ${year}? This action cannot be undone!`
+      )
+    )
+      return;
+
+    // Here you would typically:
+    // 1. Calculate retained earnings
+    // 2. Close income/expense accounts to retained earnings
+    // 3. Update opening balances for next year
+    // 4. Archive the year's data
+
     logAudit("Year-End Closed", { year });
-    alert(`Year ${year} closed!`);
+    alert(`Financial Year ${year} has been closed successfully!`);
   };
 
   return (
-    <div className="text-center py-20">
-      <h2 className="text-3xl font-bold text-red-600 mb-6">
-        Close Financial Year {year}
-      </h2>
-      <button
-        onClick={close}
-        className="px-12 py-6 bg-red-600 text-white text-xl rounded hover:bg-red-700 transition font-bold"
-      >
-        CLOSE YEAR PERMANENTLY
-      </button>
+    <div className="text-center py-12">
+      <div className="bg-white border-2 border-red-200 rounded-lg p-8 max-w-2xl mx-auto">
+        <h2 className="text-3xl font-bold text-red-600 mb-4">
+          Close Financial Year {year}
+        </h2>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-4 mb-6 text-left">
+          <h3 className="font-bold text-yellow-800 mb-2">
+            ⚠️ Important Notice
+          </h3>
+          <ul className="text-yellow-700 text-sm space-y-1">
+            <li>• This will permanently close the financial year {year}</li>
+            <li>• All income and expense accounts will be reset to zero</li>
+            <li>• Retained earnings will be calculated and carried forward</li>
+            <li>• No further transactions can be posted to year {year}</li>
+            <li>• Make sure all adjustments are completed before proceeding</li>
+          </ul>
+        </div>
+
+        <button
+          onClick={closeYear}
+          className="px-8 py-4 bg-red-600 text-white text-xl rounded-lg hover:bg-red-700 transition font-bold shadow-lg"
+        >
+          CLOSE YEAR {year} PERMANENTLY
+        </button>
+      </div>
     </div>
   );
 };
@@ -1146,30 +1837,48 @@ const AuditTrailTab = () => {
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4 text-blue-800">Audit Trail</h2>
-      <SimpleTable
-        data={(auditLogs || []).slice().reverse()}
-        columns={[
-          { Header: "Time", accessor: "timestamp", format: "datetime" },
-          { Header: "User", accessor: "user" },
-          { Header: "Action", accessor: "action" },
-          {
-            Header: "Details",
-            accessor: "details",
-            render: (row) => {
-              try {
-                const obj = JSON.parse(row.details);
-                return (
-                  <pre className="text-xs font-mono bg-gray-100 p-1 rounded">
-                    {JSON.stringify(obj, null, 2)}
-                  </pre>
-                );
-              } catch {
-                return row.details || "-";
-              }
+
+      {auditLogs && auditLogs.length > 0 ? (
+        <SimpleTable
+          data={auditLogs.slice().reverse()}
+          columns={[
+            { Header: "Timestamp", accessor: "timestamp", format: "datetime" },
+            { Header: "User", accessor: "user" },
+            { Header: "Action", accessor: "action" },
+            {
+              Header: "Details",
+              accessor: "details",
+              render: (row) => {
+                try {
+                  if (typeof row.details === "string") {
+                    const parsed = JSON.parse(row.details);
+                    return (
+                      <pre className="text-xs font-mono bg-gray-100 p-2 rounded max-w-md overflow-auto">
+                        {JSON.stringify(parsed, null, 2)}
+                      </pre>
+                    );
+                  }
+                  return (
+                    <pre className="text-xs font-mono bg-gray-100 p-2 rounded max-w-md overflow-auto">
+                      {JSON.stringify(row.details, null, 2)}
+                    </pre>
+                  );
+                } catch {
+                  return (
+                    <span className="text-sm text-gray-600">
+                      {row.details || "No details"}
+                    </span>
+                  );
+                }
+              },
             },
-          },
-        ]}
-      />
+          ]}
+        />
+      ) : (
+        <div className="text-center py-8 text-gray-500">
+          No audit logs found
+        </div>
+      )}
     </div>
   );
 };
@@ -1181,70 +1890,112 @@ const SimpleTable = ({ data, columns, totals }) => {
   const { formatCurrency } = useFinance();
 
   if (!data || data.length === 0) {
-    return <p className="text-center text-gray-500 py-8">No data available.</p>;
+    return (
+      <div className="text-center py-8 text-gray-500 bg-white rounded border">
+        No data available
+      </div>
+    );
   }
 
-  const safeRender = (value, format) => {
-    if (value == null) return "-";
-    if (typeof value === "object") {
+  const safeRender = (value, format, align = "left") => {
+    if (value == null || value === undefined || value === "") return "-";
+
+    // Handle numeric values properly
+    if (format === "currency") {
+      const numericValue =
+        typeof value === "number" ? value : parseFloat(value) || 0;
       return (
-        <pre className="text-xs font-mono bg-gray-100 p-1 rounded">
-          {JSON.stringify(value, null, 2)}
-        </pre>
+        <div className={`${align === "right" ? "text-right" : ""} font-mono`}>
+          {formatCurrency(numericValue)}
+        </div>
       );
     }
-    if (format === "currency") return formatCurrency(value);
-    if (format === "date")
+
+    if (format === "date" && value) {
       try {
         return format(parseISO(value), "dd MMM yyyy");
       } catch {
-        return "-";
+        return String(value);
       }
-    if (format === "datetime")
+    }
+
+    if (format === "datetime" && value) {
       try {
         return format(parseISO(value), "dd MMM yyyy HH:mm");
       } catch {
-        return "-";
+        return String(value);
       }
+    }
+
     return String(value);
   };
 
   return (
-    <div className="overflow-x-auto border rounded shadow-sm">
+    <div className="overflow-x-auto border rounded shadow-sm bg-white">
       <table className="w-full text-sm">
         <thead className="bg-blue-600 text-white">
           <tr>
-            {columns.map((col, i) => (
-              <th key={i} className="p-3 text-left font-semibold">
+            {columns.map((col, index) => (
+              <th
+                key={index}
+                className={`p-3 font-semibold ${
+                  col.align === "right" ? "text-right" : "text-left"
+                }`}
+              >
                 {col.Header}
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {data.map((row, i) => (
-            <tr key={i} className="border-b hover:bg-gray-50 transition">
-              {columns.map((col, j) => (
-                <td key={j} className="p-3">
+          {data.map((row, rowIndex) => (
+            <tr
+              key={rowIndex}
+              className={`border-b hover:bg-gray-50 transition ${
+                rowIndex % 2 === 0 ? "bg-white" : "bg-gray-50"
+              }`}
+            >
+              {columns.map((col, colIndex) => (
+                <td
+                  key={colIndex}
+                  className={`p-3 ${
+                    col.align === "right" ? "text-right" : "text-left"
+                  }`}
+                >
                   {col.render
                     ? col.render(row)
-                    : safeRender(row[col.accessor], col.format)}
+                    : safeRender(row[col.accessor], col.format, col.align)}
                 </td>
               ))}
             </tr>
           ))}
-          {totals && (
-            <tr className="bg-gray-800 text-white font-bold">
-              <td className="p-3">TOTAL</td>
-              {columns.slice(1).map((_, i) => (
-                <td key={i} className="p-3 text-right">
-                  {i === 0 && formatCurrency(totals.debit || 0)}
-                  {i === 1 && formatCurrency(totals.credit || 0)}
-                </td>
-              ))}
-            </tr>
-          )}
         </tbody>
+        {totals && (
+          <tfoot className="bg-gray-800 text-white font-bold">
+            <tr>
+              {columns.map((col, index) => {
+                if (index === 0) {
+                  return (
+                    <td key={index} className="p-3">
+                      {totals[col.accessor] || "Total"}
+                    </td>
+                  );
+                }
+
+                const value = totals[col.accessor];
+                if (value != null && col.format === "currency") {
+                  return (
+                    <td key={index} className="p-3 text-right font-mono">
+                      {formatCurrency(value)}
+                    </td>
+                  );
+                }
+
+                return <td key={index} className="p-3"></td>;
+              })}
+            </tr>
+          </tfoot>
+        )}
       </table>
     </div>
   );

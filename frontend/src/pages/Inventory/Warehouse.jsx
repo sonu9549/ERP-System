@@ -1,10 +1,10 @@
 // src/pages/inventory/WarehouseBins.jsx
-import { useSales } from "../../context/SalesContext";
+import { useInventory } from "../../context/InventoryContext";
 import { Plus, Edit2, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 export default function WarehouseBins() {
-  const { warehouses, setWarehouses, bins, setBins } = useSales();
+  const { warehouses, setWarehouses, bins, setBins } = useInventory();
   const [showWhForm, setShowWhForm] = useState(false);
   const [showBinForm, setShowBinForm] = useState(false);
   const [editingWh, setEditingWh] = useState(null);

@@ -1,4 +1,4 @@
-from sqlmodel import SQLModel, Field
+from sqlmodel import SQLModel, Field,Column
 from typing import Optional
 import sqlalchemy as sa
 from app.constants.roles import ROLES
@@ -15,7 +15,7 @@ class User(UserBase, table=True):
     email: str = Field(index=True, unique=True)
     name: Optional[str] = None
     hashed_password: str
-    role: ROLES = Field(sa_column=sa.Column(role_enum, nullable=False))
+    role: ROLES = Field(sa_column=Column(role_enum, nullable=False))
     is_active: bool = Field(default=True, nullable=False)
     is_superadmin: bool = Field(default=False, nullable=False)
 

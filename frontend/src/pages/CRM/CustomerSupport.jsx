@@ -84,21 +84,21 @@ const CustomerSupport = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-cyan-100 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className=" from-gray-50 to-black-100 p-1">
+      <div className="max-w-9xl mx-auto">
         {/* HEADER */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8 mb-8">
+        <div className="bg-white rounded-2xl shadow-2xl p-5 mb-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-5xl font-bold text-teal-700">
+              <h1 className="text-4xl font-bold text-black-300">
                 Customer Support
               </h1>
-              <p className="text-xl text-gray-600 mt-2">
+              <p className="text-gray-400 mt-2">
                 Happy Customers = More Business
               </p>
             </div>
             <div className="text-right">
-              <p className="text-4xl font-bold text-green-600">
+              <p className="text-3xl font-bold text-blue-400">
                 {tickets.filter((t) => t.status === "Resolved").length}
               </p>
               <p className="text-lg text-gray-600">Resolved Today</p>
@@ -113,11 +113,11 @@ const CustomerSupport = () => {
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-10 py-5 font-bold text-lg ${
+                className={`px-10 py-3 font-bold text-lg ${
                   activeTab === tab
-                    ? "bg-teal-600 text-white"
+                    ? "bg-gray-600 text-white"
                     : "bg-gray-100 text-gray-700"
-                } hover:bg-teal-500 hover:text-white transition`}
+                } hover:bg-blue-500 hover:text-white transition`}
               >
                 {tab === "tickets"
                   ? "All Tickets"

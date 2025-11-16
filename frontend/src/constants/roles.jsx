@@ -21,4 +21,11 @@ export const ROLE_LABELS = {
   [ROLES.SUPER_ADMIN]: "Super Admin",
   [ROLES.ADMIN]: "Admin",
   [ROLES.USER]: "User",
+  [ROLES.SALES_MANAGER]: "Admin",
 };
+
+export const DEMO_EMAILS = [
+  "admin@nextgen.com",
+  "sales@nextgen.com",
+  "user@nextgen.com",
+];
